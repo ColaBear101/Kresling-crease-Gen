@@ -1,3 +1,6 @@
-# Kresling-crease-Gen
-Vibecode with Copilot
-Adjustable jupyter notebook for generate Kresling crease pattern and able to export to A4 for print
+# Kresling crease cobblestone Generator
+
+Jupyter Notebook for generating customizable Kresling origami crease patterns, designed for export to A4 paper for easy printing.
+
+- **(Vibecode via Copilot)**
+
