@@ -1,6 +1,6 @@
 # Kresling crease cobblestone Generator
 
-Jupyter Notebook for generating customizable Kresling origami crease patterns, designed for export to A4 paper for easy printing.
+Web Application for generating customizable Kresling origami crease patterns, designed for export to A4 paper for easy printing.
 
-- **(Vibecode via Copilot)**
+- **(Vibecode via Copilot in the beginning and now by the lord Claude)**
 
