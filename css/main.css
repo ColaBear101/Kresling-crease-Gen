@@ -1,0 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+/* Paste all your <style> rules here from your old index.html. For demo, keeping minimal: */
+body { background: #0f1117; color: #e8eaf0; font-family:'DM Sans',sans-serif; }
+.toolbar-title { font-family:'JetBrains Mono',monospace; font-size:13px; }
+/* Add the rest of your CSS ... */
