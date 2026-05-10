@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kresling Crease Generator v23</title>
+<title>Kresling Crease Generator</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -173,7 +173,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
       <div class="ctrl-check"><input type="checkbox" id="showmv" checked><label for="showmv">Show M/V colors</label></div>
 
       <div class="sec-label">STL Export</div>
-      <div class="ctrl"><label>Wall (mm)</label><div class="ctrl-right"><input type="range" id="r-wallmm" min="0.4" max="5" step="0.1" value="0.8"><input class="num-inp" id="n-wallmm" type="number" min="0.4" max="5" step="0.1" value="0.8"></div></div>
+      <div class="ctrl"><label>Wall (mil)</label><div class="ctrl-right"><input type="range" id="r-wallmm" min="1" max="5" step="1" value="5"><input class="num-inp" id="n-wallmm" type="number" min="1" max="5" step="1" value="5"></div></div>
       <div class="ctrl"><label>Mold base (mm)</label><div class="ctrl-right"><input type="range" id="r-moldbase" min="1" max="10" step="0.5" value="3"><input class="num-inp" id="n-moldbase" type="number" min="1" max="10" step="0.5" value="3"></div></div>
       <div class="ctrl"><label>Ridge h (mm)</label><div class="ctrl-right"><input type="range" id="r-ridgeh" min="0.5" max="5" step="0.1" value="1.2"><input class="num-inp" id="n-ridgeh" type="number" min="0.5" max="5" step="0.1" value="1.2"></div></div>
       <div class="ctrl"><label>Ridge w (mm)</label><div class="ctrl-right"><input type="range" id="r-ridgew" min="0.3" max="3" step="0.1" value="0.6"><input class="num-inp" id="n-ridgew" type="number" min="0.3" max="3" step="0.1" value="0.6"></div></div>
@@ -185,9 +185,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
         <button class="center-tab active" id="ctab-crease" onclick="switchCenterTab('crease')">Crease pattern</button>
         <button class="center-tab" id="ctab-mold" onclick="switchCenterTab('mold')">Mold preview</button>
         <div class="mold-sub-tabs" id="mold-sub-tabs" style="display:none">
-          <button class="mold-tab active" id="mtab-mountain" onclick="switchMoldTab('mountain')">Mountain</button>
-          <button class="mold-tab" id="mtab-valley" onclick="switchMoldTab('valley')">Valley</button>
-          <button class="mold-tab" id="mtab-both" onclick="switchMoldTab('both')">Both</button>
+          <button class="mold-tab active" id="mtab-mountain" onclick="switchMoldTab('mountain')">Plate 1 — mountain ^</button>
+          <button class="mold-tab" id="mtab-valley" onclick="switchMoldTab('valley')">Plate 2 — valley ^</button>
+          <button class="mold-tab" id="mtab-both" onclick="switchMoldTab('both')">Assembled</button>
         </div>
       </div>
       <!-- Crease pattern pane -->
@@ -204,6 +204,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
           <div class="stat"><div class="stat-l">Bistable</div><div class="stat-v" id="s-bi">—</div></div>
           <div class="stat"><div class="stat-l">A4 fit</div><div class="stat-v" id="s-fit">—</div></div>
           <div class="stat"><div class="stat-l">Scale</div><div class="stat-v" id="s-scale">—</div></div>
+          <div class="stat"><div class="stat-l">Outer ⌀</div><div class="stat-v" id="s-od">—</div></div>
+          <div class="stat"><div class="stat-l">Inner ⌀ (fold)</div><div class="stat-v" id="s-id">—</div></div>
+          <div class="stat"><div class="stat-l">Tube h (fold)</div><div class="stat-v" id="s-th">—</div></div>
+          <div class="stat"><div class="stat-l">Mat. thick</div><div class="stat-v" id="s-fw">—</div></div>
         </div>
         <div class="mv-legend">
           <span><span class="mv-dot" style="background:#378ADD"></span>Blue — valley</span>
@@ -264,8 +268,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
     <button onclick="exportPDF()">⬇ PDF (print)</button>
     <button onclick="exportDXF()">⬇ DXF</button>
     <button onclick="exportSTL()">⬇ STL (tube)</button>
-    <button onclick="exportMoldSTL('mountain')">⬇ STL (mountain mold)</button>
-    <button onclick="exportMoldSTL('valley')">⬇ STL (valley mold)</button>
+    <button onclick="exportPlate1STL()" title="Plate 1: mountain ridges ^ press down, valley grooves V receive plate 2 ridges">⬇ STL (plate 1 — mountain ^)</button>
+    <button onclick="exportPlate2STL()" title="Plate 2: valley ridges ^ press up, mountain grooves V receive plate 1 ridges">⬇ STL (plate 2 — valley ^)</button>
     <div class="sep"></div>
     <button onclick="autoFitA4()">↔ Auto-fit A4</button>
     <button onclick="undo()" title="Undo (Ctrl+Z)">↩ Undo</button>
@@ -316,12 +320,12 @@ function initRightPanelResize(){
 
 // ─── PRESETS ───
 const PRESETS={
-  bistable6: {dia:4,height:16,n:6,floors:8,angle:105,ext:1.5,seaml:1.57,seamr:1.57,extcols:1,stack:1,scale:100,compress:0,wallmm:0.8},
-  bistable8: {dia:5,height:20,n:8,floors:10,angle:100,ext:2,seaml:1.96,seamr:1.96,extcols:1,stack:1,scale:100,compress:0,wallmm:0.8},
-  monostable:{dia:3,height:12,n:6,floors:6,angle:120,ext:1,seaml:0,seamr:0,extcols:0,stack:1,scale:100,compress:0,wallmm:0.8},
-  tower:     {dia:2.5,height:30,n:6,floors:16,angle:95,ext:1.5,seaml:1.31,seamr:1.31,extcols:1,stack:2,scale:80,compress:0,wallmm:0.8},
-  flat:      {dia:8,height:8,n:12,floors:4,angle:90,ext:1,seaml:0,seamr:0,extcols:0,stack:1,scale:60,compress:0,wallmm:0.8},
-  compact:   {dia:3,height:6,n:5,floors:4,angle:110,ext:1,seaml:1.88,seamr:1.88,extcols:1,stack:1,scale:100,compress:0,wallmm:0.8},
+  bistable6: {dia:4,height:16,n:6,floors:8,angle:105,ext:1.5,seaml:1.57,seamr:1.57,extcols:1,stack:1,scale:100,compress:0,wallmm:5},
+  bistable8: {dia:5,height:20,n:8,floors:10,angle:100,ext:2,seaml:1.96,seamr:1.96,extcols:1,stack:1,scale:100,compress:0,wallmm:5},
+  monostable:{dia:3,height:12,n:6,floors:6,angle:120,ext:1,seaml:0,seamr:0,extcols:0,stack:1,scale:100,compress:0,wallmm:5},
+  tower:     {dia:2.5,height:30,n:6,floors:16,angle:95,ext:1.5,seaml:1.31,seamr:1.31,extcols:1,stack:2,scale:80,compress:0,wallmm:5},
+  flat:      {dia:8,height:8,n:12,floors:4,angle:90,ext:1,seaml:0,seamr:0,extcols:0,stack:1,scale:60,compress:0,wallmm:5},
+  compact:   {dia:3,height:6,n:5,floors:4,angle:110,ext:1,seaml:1.88,seamr:1.88,extcols:1,stack:1,scale:100,compress:0,wallmm:5},
 };
 
 function loadPreset(key){
@@ -691,25 +695,6 @@ function computeGeometry(p){
   const valid=dx<b&&floor_h>0&&b>0;
   return{b,floor_h,dx,red_len,green_len,gr_angle,h0r,bistable,valid,R,green_dx};
 }
-
-function patternBounds(p,g){
-  const{n,floors,ext,seaml,seamr,extcols,stack,xoff=0,yoff=0}=p;
-  const{b,floor_h,dx}=g;
-  const totalFloors=floors*stack;
-  const col_min=-extcols,col_max=n+extcols;
-  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-  for(let f=0;f<=totalFloors;f++){
-    for(let col=col_min;col<=col_max;col++){
-      let x=col*b,y=f*floor_h;
-      if(f%2===1)x+=dx*p.chir;else x-=dx*p.chir;
-      if(x<minX)minX=x;if(x>maxX)maxX=x;
-      if(y<minY)minY=y;if(y>maxY)maxY=y;
-    }
-  }
-  minX-=seaml;maxX+=seamr;minY-=ext;maxY+=ext;
-  return{minX,maxX,minY,maxY,w:maxX-minX,h:maxY-minY};
-}
-
 function updateStats(p,g){
   const bounds=patternBounds(p,g);
   const sW=bounds.w*p.scale,sH=bounds.h*p.scale;
@@ -726,6 +711,48 @@ function updateStats(p,g){
   document.getElementById('s-scale').textContent=(p.scale*100).toFixed(0)+'%';
   document.getElementById('s-fit').textContent=fits?`✓ ${fitW}%W ${fitH}%H`:`✗ ${fitW}%W ${fitH}%H`;
   document.getElementById('s-fit').style.color=fits?'#4ade80':'#f87171';
+
+  // ── FOLDED TUBE DIMENSIONS ──
+  // Outer diameter = design diameter (constant — paper is inextensible)
+  const outerD = p.dia;
+  document.getElementById('s-od').textContent = outerD.toFixed(2)+' cm';
+
+  // Inner diameter when folded (at current compression level):
+  // The Kresling tube compresses by rotating each ring.
+  // At compression c (0=extended, 1=collapsed):
+  //   effective floor height: eFH = floor_h * (1 - c*0.98)
+  //   effective dx:           eDx = dx * (1 - c*0.5)
+  //   angular offset per ring: φ = eDx / R
+  //
+  // The inner diameter is defined as the diameter of the inscribed circle
+  // of the polygon at the mid-height between two rings, where the facets
+  // are most inward. For a Kresling tube this is the apothem of the
+  // rotated polygon cross-section:
+  //   apothem = R * cos(π/n) at the midpoint of each floor
+  //   but the facets are tilted — the actual minimum inscribed radius is:
+  //   r_inner = R * cos(π/n) * cos(φ/2)
+  //   where φ is the angular twist per floor.
+  //
+  // This gives inner diameter = 2 * R * cos(π/n) * cos(φ/2)
+  const compress = p.compress; // 0..1
+  const{floor_h, dx, R, n} = g;
+  const eFH = floor_h * (1 - compress*0.98);
+  const eDx = dx * (1 - compress*0.5);
+  const phi = eDx / R; // angular offset per floor
+  const apothem = R * Math.cos(Math.PI/n); // inscribed circle radius of polygon
+  const r_inner = apothem * Math.cos(phi/2);
+  const innerD = 2 * Math.max(0, r_inner);
+  const totalFloors = p.floors * p.stack;
+  const tubeH = eFH * totalFloors;
+
+  document.getElementById('s-id').textContent = innerD.toFixed(2)+' cm';
+  document.getElementById('s-id').style.color = innerD > 0 ? '#e0eeff' : '#f87171';
+  document.getElementById('s-th').textContent = tubeH.toFixed(2)+' cm';
+
+  // Material thickness in mm (for reference)
+  const matThickMm = (p.wallmm||5) * 0.0254; // mil → mm
+  document.getElementById('s-fw').textContent = matThickMm.toFixed(3)+' mm';
+
   const badge=document.getElementById('validity-badge'),warn=document.getElementById('warn-bar');
   if(!g.valid){badge.className='badge bad';badge.textContent='Invalid';warn.style.display='block';warn.textContent='⚠ dx ≥ side length — angle too shallow.';}
   else if(g.h0r>1.8){badge.className='badge warn';badge.textContent='Marginal';warn.style.display='block';warn.textContent='⚠ h₀/R high — may not fold cleanly.';}
@@ -744,7 +771,7 @@ function autoFitA4(){
   document.getElementById('r-scale').value=cl;document.getElementById('n-scale').value=cl;draw();
 }
 function resetDefaults(){
-  const defs={dia:3,height:20,n:6,floors:10,angle:100,ext:2,seaml:1.4,seamr:0,extcols:1,stack:1,scale:100,compress:0,wallmm:0.8};
+  const defs={dia:3,height:20,n:6,floors:10,angle:100,ext:2,seaml:1.4,seamr:0,extcols:1,stack:1,scale:100,compress:0,wallmm:5,moldbase:3,ridgeh:1.2,ridgew:0.8};
   Object.entries(defs).forEach(([k,v])=>{const r=document.getElementById('r-'+k),n=document.getElementById('n-'+k);if(r)r.value=v;if(n)n.value=v;});
   seamAutoMode=true;const cb=document.getElementById('seam-auto-cb');if(cb)cb.checked=true;
   applyAutoSeam();draw();
@@ -1136,6 +1163,8 @@ function drawMold3d(){
   const patOriginX=(A4_W-scaledW)/2, patOriginY=(A4_H-scaledH)/2;
   const baseT=(p.moldbase||3)/10;
   const ridgeH=(p.ridgeh||1.2)/10;
+  const wallT=(p.wallmm||5)*0.00254; // mil → cm
+  const ridgeH2=ridgeH; // alias for clarity in preview
   const margin=0.2;
 
   // Rebuild 2D verts
@@ -1203,41 +1232,6 @@ function drawMold3d(){
   // Draw a mold (base plate + ridges) at vertical offset yOff
   // ridgeSegs: array of [[ax,ay],[bx,by]] in pattern 2D
   // color scheme: plateColor, ridgeColor
-  function drawMold(yOff, ridgeSegs, plateCol, ridgeCol, label){
-    const yBot=yOff-baseT, yTop=yOff;
-    const bx0=seamLX-margin, bx1=seamRX+margin;
-    const bz0=topY-margin, bz1=botY+margin;
-
-    // Base plate — 6 faces
-    const corners={
-      tl0:[bx0,yBot,bz0],tr0:[bx1,yBot,bz0],tl1:[bx0,yBot,bz1],tr1:[bx1,yBot,bz1],
-      bl0:[bx0,yTop,bz0],br0:[bx1,yTop,bz0],bl1:[bx0,yTop,bz1],br1:[bx1,yTop,bz1],
-    };
-    addFace([corners.bl0,corners.br0,corners.br1,corners.bl1],plateCol,0.82); // top
-    addFace([corners.tl0,corners.tl1,corners.tr1,corners.tr0],plateCol,0.45); // bottom
-    addFace([corners.tl0,corners.bl0,corners.bl1,corners.tl1],plateCol,0.55); // front -X
-    addFace([corners.tr0,corners.tr1,corners.br1,corners.br0],plateCol,0.55); // back +X
-    addFace([corners.tl0,corners.tr0,corners.br0,corners.bl0],plateCol,0.60); // left -Z
-    addFace([corners.tl1,corners.bl1,corners.br1,corners.tr1],plateCol,0.60); // right +Z
-
-    // Plate outline
-    [[corners.bl0,corners.br0],[corners.br0,corners.br1],[corners.br1,corners.bl1],[corners.bl1,corners.bl0]].forEach(([a,b])=>addLine(a,b,'rgba(255,255,255,0.15)',0.8));
-
-    // Ridges — draw as lines with glow effect
-    for(const[[ax,ay],[bx_,by_]] of ridgeSegs){
-      const a3=[ax,yTop,ay], b3=[bx_,yTop,by_];
-      const ap=[ax,yTop+ridgeH,ay], bp=[bx_,yTop+ridgeH,by_];
-      addFace([a3,b3,bp,ap],ridgeCol,0.85);
-      addLine(ap,bp,ridgeCol,2);
-      addLine(a3,ap,ridgeCol,1.2);
-      addLine(b3,bp,ridgeCol,1.2);
-    }
-
-    // Label at plate center
-    const labelPt=project([cx_,yTop+ridgeH+0.2,cz_]);
-    if(labelPt) drawCalls.push({type:'label',pt:labelPt,text:label,z:labelPt[2]});
-  }
-
   // Collect ridge segments for each type
   const mountainSegs=[];
   for(let ci=1;ci<total_cols-1;ci++)
@@ -1254,25 +1248,69 @@ function drawMold3d(){
     }
 
   const plateBase='#2a3050', mtnRidge='#e05252', valRidge='#378ADD';
+  // ridgeSegs: array of [[ax,ay],[bx,by]] in pattern 2D — drawn as RIDGES (^) above plate
+  // grooveSegs: drawn as GROOVES (V) into the plate face (shown as inset lines)
+
+  function drawPlate(yOff, ridgeSegsArr, grooveSegsArr, plateCol, ridgeCol, grooveCol, label){
+    const yBot=yOff-baseT, yTop=yOff;
+    const bx0=seamLX-margin, bx1=seamRX+margin;
+    const bz0=topY-margin, bz1=botY+margin;
+
+    // Base plate faces
+    const corners={
+      tl0:[bx0,yBot,bz0],tr0:[bx1,yBot,bz0],tl1:[bx0,yBot,bz1],tr1:[bx1,yBot,bz1],
+      bl0:[bx0,yTop,bz0],br0:[bx1,yTop,bz0],bl1:[bx0,yTop,bz1],br1:[bx1,yTop,bz1],
+    };
+    addFace([corners.bl0,corners.br0,corners.br1,corners.bl1],plateCol,0.82); // working face (top)
+    addFace([corners.tl0,corners.tl1,corners.tr1,corners.tr0],plateCol,0.45); // back
+    addFace([corners.tl0,corners.bl0,corners.bl1,corners.tl1],plateCol,0.55);
+    addFace([corners.tr0,corners.tr1,corners.br1,corners.br0],plateCol,0.55);
+    addFace([corners.tl0,corners.tr0,corners.br0,corners.bl0],plateCol,0.60);
+    addFace([corners.tl1,corners.bl1,corners.br1,corners.tr1],plateCol,0.60);
+    [[corners.bl0,corners.br0],[corners.br0,corners.br1],[corners.br1,corners.bl1],[corners.bl1,corners.bl0]].forEach(([a,b])=>addLine(a,b,'rgba(255,255,255,0.15)',0.8));
+
+    // RIDGES (^) — protrude above working face
+    for(const[[ax,ay],[bx_,by_]] of ridgeSegsArr){
+      const a3=[ax,yTop,ay], b3=[bx_,yTop,by_];
+      const ap=[ax,yTop+ridgeH,ay], bp=[bx_,yTop+ridgeH,by_];
+      addFace([a3,b3,bp,ap],ridgeCol,0.9);
+      addLine(ap,bp,ridgeCol,2.5);
+      addLine(a3,ap,ridgeCol,1);
+      addLine(b3,bp,ridgeCol,1);
+    }
+
+    // GROOVES (V) — shown as inset lines on the face
+    for(const[[ax,ay],[bx_,by_]] of grooveSegsArr){
+      const ag=[ax,yTop-ridgeH*0.5,ay], bg=[bx_,yTop-ridgeH*0.5,by_];
+      addLine([ax,yTop,ay],[bx_,yTop,by_],grooveCol,1.5,[3,2]);
+      addLine(ag,bg,grooveCol,1);
+    }
+
+    const labelPt=project([cx_,yTop+ridgeH+0.15,cz_]);
+    if(labelPt) drawCalls.push({type:'label',pt:labelPt,text:label,z:labelPt[2]});
+  }
 
   if(currentMoldTab==='mountain'){
-    drawMold(0, mountainSegs, plateBase, mtnRidge, 'Mountain mold');
+    // Plate 1: mountain=ridge^, valley=groove V
+    drawPlate(0, mountainSegs, valleySegs, plateBase, mtnRidge, valRidge, 'Plate 1 — top');
   } else if(currentMoldTab==='valley'){
-    drawMold(0, valleySegs, plateBase, valRidge, 'Valley mold');
+    // Plate 2: mountain=groove V, valley=ridge^
+    drawPlate(0, valleySegs, mountainSegs, plateBase, valRidge, mtnRidge, 'Plate 2 — bottom');
   } else {
-    // Both: valley mold below (yOff=-moldGap), paper in middle, mountain mold above
-    drawMold(moldGap+baseT, mountainSegs, '#253040', mtnRidge, 'Mountain mold (top)');
+    // Assembled: plate 2 below, paper in middle, plate 1 above (flipped)
+    // Plate 1 on top (flipped — ridges point DOWN toward paper)
+    drawPlate(moldGap+baseT, mountainSegs, valleySegs, '#253040', mtnRidge, valRidge, 'Plate 1 (top, flipped)');
     // Paper plane in middle
     const py=moldGap/2;
-    const paperAlpha=0.22;
-    addFace([[seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin]],'#ffffff',paperAlpha);
-    addLine([seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],'rgba(255,255,255,0.3)',0.8);
-    addLine([seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],'rgba(255,255,255,0.3)',0.8);
-    addLine([seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin],'rgba(255,255,255,0.3)',0.8);
-    addLine([seamLX-margin,py,botY+margin],[seamLX-margin,py,topY-margin],'rgba(255,255,255,0.3)',0.8);
+    addFace([[seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin]],'#ffffff',0.25);
+    addLine([seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],'rgba(255,255,255,0.4)',0.8);
+    addLine([seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],'rgba(255,255,255,0.4)',0.8);
+    addLine([seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin],'rgba(255,255,255,0.4)',0.8);
+    addLine([seamLX-margin,py,botY+margin],[seamLX-margin,py,topY-margin],'rgba(255,255,255,0.4)',0.8);
     const ppPt=project([cx_,py,cz_]);
     if(ppPt) drawCalls.push({type:'label',pt:ppPt,text:'paper',z:ppPt[2]});
-    drawMold(0, valleySegs, '#253040', valRidge, 'Valley mold (bottom)');
+    // Plate 2 on bottom (ridges point UP toward paper)
+    drawPlate(0, valleySegs, mountainSegs, '#253040', valRidge, mtnRidge, 'Plate 2 (bottom)');
   }
 
   // Sort back-to-front and draw
@@ -2030,13 +2068,14 @@ function exportSVG(){
       lines.push(L(ax,ay,bxv,byv,'#007a30',1.5,'6 4'));
     }
   }
-  // Info box SVG in bottom gap: floor-0 line → bottom purple border
-  // In SVG: y0 (cm) → larger SVG y (lower on page), topY (cm, = y0-extS) → even larger SVG y
-  // So bottom gap top edge = toSVG(y0), bottom edge = toSVG(topY)
+  // Info box SVG: gap is ABOVE floor-0 line (between topY border and y0 first crease)
+  // In SVG y-down coords: topY has LARGER SVG y than y0 (topY is visually lower = higher SVG y)
+  // Gap top edge (visually) = y0 → smaller SVG y
+  // Gap bottom edge (visually) = topY → larger SVG y
   const[olX]=toSVG(x0,0),[orX]=toSVG(x1,0);
-  const[,gapTopSVG]=toSVG(0,y0);   // floor-0 line in SVG coords (top of bottom gap)
-  const[,gapBotSVG]=toSVG(0,topY); // bottom purple border in SVG coords (bottom of bottom gap)
-  lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,null,gapBotSVG,gapTopSVG));
+  const[,gapTopSVG]=toSVG(0,y0);   // first crease line → top of info box gap
+  const[,gapBotSVG]=toSVG(0,topY); // cut border line → bottom of info box gap
+  lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,gapTopSVG,gapBotSVG,gapTopSVG));
 
   const svg=`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${A4pxW}" height="${A4pxH}" viewBox="0 0 ${A4pxW} ${A4pxH}"><rect width="100%" height="100%" fill="white"/>\n${lines.join('\n')}\n</svg>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
@@ -2123,12 +2162,11 @@ function exportPDF(){
       lines.push(L(ax,ay,bxv,byv,'#007a30',1.5,'6 4'));
     }
   }
-  // Info box in bottom gap — floor-0 line (y0) → bottom purple border (topY)
-  // In SVG coords (y flipped): toSVG(y0) gives larger SVG-y, toSVG(topY) gives even larger SVG-y
+  // Info box: gap between cut border (topY) and first crease line (y0)
   const[olX]=toSVG(x0,0),[orX]=toSVG(x1,0);
-  const[,gapTopSVG]=toSVG(0,y0);   // floor-0 line → top edge of bottom gap
-  const[,gapBotSVG]=toSVG(0,topY); // bottom purple border → bottom edge of bottom gap
-  lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,null,gapBotSVG,gapTopSVG));
+  const[,gapTopSVG]=toSVG(0,y0);   // first crease line → smaller SVG y = visually top of gap
+  const[,gapBotSVG]=toSVG(0,topY); // cut border → larger SVG y = visually bottom of gap
+  lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,gapTopSVG,gapBotSVG,gapTopSVG));
 
   const svgBody=`<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 ${A4pxW} ${A4pxH}" preserveAspectRatio="none" style="display:block;position:absolute;top:0;left:0;width:210mm;height:297mm"><rect width="100%" height="100%" fill="white"/>\n${lines.join('\n')}\n</svg>`;
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kresling n=${p.n} f=${p.floors}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:210mm 297mm;margin:0mm}html,body{width:210mm;height:297mm;margin:0;padding:0;background:white;overflow:hidden;position:relative}svg{display:block;position:absolute;top:0;left:0;width:210mm!important;height:297mm!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}@media print{html,body{width:210mm;height:297mm}svg{width:210mm!important;height:297mm!important}}</style></head><body>${svgBody}<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script></body></html>`;
@@ -2185,7 +2223,7 @@ function exportSTL(){
   const totalFloors=floors*stack;
   const eFH=floor_h*(1-compress*0.98);
   const eDx=dx*(1-compress*0.5);
-  const wallT=(p.wallmm||0.8)/10; // mm → cm
+  const wallT=(p.wallmm||5)*0.00254; // mil → cm (1 mil = 0.0254mm)
   const Ri=Math.max(0.01,R-wallT); // inner radius
 
   // Build outer and inner vertex rings
@@ -2274,24 +2312,28 @@ function exportSTL(){
   a.click();
 }
 
-// ─── MOLD STL EXPORT ───
-// Generates a flat press mold for pre-creasing the Kresling crease pattern.
+// ─── ORIGAMI PRESS MOLD STL EXPORT ───
 //
-// Concept:
-//   • A solid rectangular base plate (width=patternW, height=patternH, depth=baseThickness).
-//   • Along each crease line, a sharp triangular ridge protrudes from the flat surface.
-//   • Mountain mold: ridges on TOP face → press paper from above → forms mountain creases.
-//   • Valley mold:   ridges on TOP face for valley lines only → counter-mold for valley folds.
-//   • Two molds together form a matched pair: clamp paper between them, all folds pre-set.
+// TWO PLATES — TRUE OPPOSITES:
 //
-// Ridge cross-section is an isosceles triangle (base=ridgeW, height=ridgeH).
-// Each crease segment (between two 2D points) becomes an extruded triangular prism.
-// The base plate is a simple rectangular box.
-// All geometry is in cm units matching the crease pattern.
+// PLATE 1 (top plate — placed ridge-face DOWN onto paper):
+//   Mountain creases → ridges (^) protrude downward when assembled, press paper into valley below
+//   Valley creases   → grooves (V) cut into face, receive Plate 2's valley ridges from below
 //
-// STL coordinate system: X = pattern horizontal, Y = pattern vertical, Z = up (out of plate).
+// PLATE 2 (bottom plate — placed ridge-face UP, paper sits on top):
+//   Mountain creases → grooves (V) cut into face, receive Plate 1's mountain ridges from above
+//   Valley creases   → ridges (^) protrude upward, press paper into Plate 1's valley grooves
+//
+// ASSEMBLY: Plate 2 flat on table. Paper on top. Plate 1 flipped down on paper.
+//   Mountain ridges (P1) lock into mountain grooves (P2). ← mountain fold
+//   Valley ridges (P2) lock into valley grooves (P1). ← valley fold
+//   Clamp together. Every crease pre-set simultaneously.
+//
+// RIDGE cross-section: flat-topped trapezoid (not sharp), with tipW flat at apex.
+// GROOVE cross-section: matching inward trapezoid, slightly wider (+clearance) so plates fit.
+// GAP at vertices: ridges/grooves stop short by vertexGap at endpoints where creases meet.
 
-function exportMoldSTL(moldType){
+function _buildMoldGeometry(){
   const p=getP(), g=computeGeometry(p);
   const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
   const{b,floor_h,dx}=g;
@@ -2299,189 +2341,286 @@ function exportMoldSTL(moldType){
   const col_min=-extcols, col_max=n+extcols, total_cols=col_max-col_min+1;
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale, scaledH=bounds.h*scale;
+  const patOriginX=(A4_W-scaledW)/2, patOriginY=(A4_H-scaledH)/2;
 
-  // Mold params (convert mm → cm)
-  const baseT=(p.moldbase||3)/10;   // base plate thickness
-  const ridgeH=(p.ridgeh||1.2)/10;  // ridge height above plate surface
-  const ridgeW=(p.ridgew||0.6)/10;  // ridge base width (half-width each side = ridgeW/2)
+  const baseT    = (p.moldbase||3)/10;
+  const ridgeH   = (p.ridgeh||1.2)/10;  // wedge height in cm
+  // ridgeW = slope half-width from slider.
+  // The wedge slope angle = atan(ridgeH / ridgeW).
+  // At ridgeH=1.2mm, ridgeW=0.8mm → slope angle ≈ 56° (steep, firm crease).
+  // User adjusts ridgew slider for desired slope angle.
+  // Wall thickness (mil) only affects the hollow tube STL, not the mold geometry.
+  const ridgeW   = (p.ridgew||0.8)/10;        // slope half-width in cm
+  const vertexGap= ridgeW * 1.5;              // clear space at crease intersections
 
-  // Pattern origin: centered in A4 (same as crease pattern rendering)
-  const patOriginX=(A4_W-scaledW)/2;
-  const patOriginY=(A4_H-scaledH)/2;
-
-  // Build 2D vertex array (same logic as flat render)
-  function makeVerts(){
-    const verts=[];
-    for(let f=0;f<=totalFloors;f++){
-      const row=[];
-      for(let col=col_min;col<=col_max;col++){
-        let x=col*b, y=f*floor_h;
-        if(f%2===1) x+=dx*chir; else x-=dx*chir;
-        const nx=(x-bounds.minX)*scale+patOriginX;
-        const ny=(y-bounds.minY)*scale+patOriginY;
-        row.push([nx,ny]);
-      }
-      verts.push(row);
+  const verts=[];
+  for(let f=0;f<=totalFloors;f++){
+    const row=[];
+    for(let col=col_min;col<=col_max;col++){
+      let x=col*b, y=f*floor_h;
+      if(f%2===1) x+=dx*chir; else x-=dx*chir;
+      row.push([(x-bounds.minX)*scale+patOriginX,(y-bounds.minY)*scale+patOriginY]);
     }
-    return verts;
+    verts.push(row);
   }
-  const verts=makeVerts();
   const olIdx=extcols, orIdx=extcols+n;
+  const[x0,y0]=verts[0][olIdx],[x1]=verts[0][orIdx];
+  const[x2]=verts[totalFloors][olIdx],[x3,y3]=verts[totalFloors][orIdx];
   const extS=ext*scale, seamlS=seaml*scale, seamrS=seamr*scale;
-  const [x0,y0]=verts[0][olIdx], [x1]=verts[0][orIdx];
-  const [x2,y2]=verts[totalFloors][olIdx], [x3,y3]=verts[totalFloors][orIdx];
-  const topY=y0-extS, botY=y3+extS;
+  const topY_=y0-extS, botY_=y3+extS;
   const seamLX=x0-seamlS, seamRX=x1+seamrS;
+  const margin=0.2;
+  const pX0=seamLX-margin, pX1=seamRX+margin;
+  const pY0=topY_-margin,  pY1=botY_+margin;
+  const zBack=0, zWork=baseT;
 
-  // Plate bounds: use the full cut-border rectangle + small margin
-  const margin=0.2; // cm
-  const plateX0=seamLX-margin, plateX1=seamRX+margin;
-  const plateY0=topY-margin, plateY1=botY+margin;
-  const plateW=plateX1-plateX0, plateH_=plateY1-plateY0;
+  const mountainSegs=[];
+  for(let ci=1;ci<total_cols-1;ci++)
+    for(let f=0;f<totalFloors;f++)
+      mountainSegs.push([verts[f][ci][0],verts[f][ci][1],verts[f+1][ci][0],verts[f+1][ci][1]]);
 
-  // STL helpers
-  function cross([ax,ay,az],[bx,by,bz]){return[ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];}
-  function sub([ax,ay,az],[bx,by,bz]){return[ax-bx,ay-by,az-bz];}
-  function norm(v){const l=Math.hypot(...v)||1;return v.map(c=>c/l);}
+  const valleySegs=[];
+  for(let f=0;f<=totalFloors;f++)
+    valleySegs.push([seamLX,verts[f][0][1],seamRX,verts[f][0][1]]);
+  for(let f=0;f<totalFloors;f++)
+    for(let ci=0;ci<total_cols-1;ci++){
+      const v1=verts[f][ci],v2=verts[f+1][ci+1],v3=verts[f][ci+1],v4=verts[f+1][ci];
+      const[ax,ay,bx_,by_]=(f*chir)%2===0?[v3[0],v3[1],v4[0],v4[1]]:[v1[0],v1[1],v2[0],v2[1]];
+      valleySegs.push([ax,ay,bx_,by_]);
+    }
+
+  return{p,baseT,ridgeH,ridgeW,vertexGap,
+         verts,x0,x1,x2,x3,y0,y3,topY_,botY_,seamLX,seamRX,
+         pX0,pX1,pY0,pY1,zBack,zWork,mountainSegs,valleySegs,n,floors,stack,
+         total_cols,col_min,col_max,totalFloors};
+}
+
+function _stlHelpers(){
+  const vcross=([ax,ay,az],[bx,by,bz])=>[ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
+  const vsub  =([ax,ay,az],[bx,by,bz])=>[ax-bx,ay-by,az-bz];
+  const vnorm =v=>{const l=Math.hypot(...v)||1;return v.map(c=>c/l);};
   function tri(v1,v2,v3){
-    const n=norm(cross(sub(v2,v1),sub(v3,v1)));
+    const nm=vnorm(vcross(vsub(v2,v1),vsub(v3,v1)));
     const f=x=>x.toFixed(6);
-    return `  facet normal ${n.map(f).join(' ')}\n    outer loop\n`
+    return`  facet normal ${nm.map(f).join(' ')}\n    outer loop\n`
       +`      vertex ${v1.map(f).join(' ')}\n`
       +`      vertex ${v2.map(f).join(' ')}\n`
       +`      vertex ${v3.map(f).join(' ')}\n`
       +`    endloop\n  endfacet\n`;
   }
-  function quad(v1,v2,v3,v4){return tri(v1,v2,v3)+tri(v1,v3,v4);}
+  const quad=(v1,v2,v3,v4)=>tri(v1,v2,v3)+tri(v1,v3,v4);
+  return{tri,quad};
+}
 
-  let stl=`solid kresling_${moldType}_mold_n${n}_f${floors}\n`;
+// ── ORIGAMI PRESS — ANGLED SURFACE APPROACH ──
+//
+// The plate surface is NOT flat with ridges/grooves ON TOP.
+// The surface ITSELF changes angle along every crease line.
+//
+// Along each crease segment, the plate surface rises to a peak (mountain) or
+// dips to a valley, forming a continuous angled mesh — like a folded sheet.
+//
+// Cross-section perpendicular to a crease line:
+//
+//   Mountain crease (plate 1):    Valley crease (plate 1):
+//         peak                        flat   flat
+//        /    \                           \ /
+//   flat/      \flat                    valley
+//
+// The plate is tessellated as angled triangular panels between crease lines.
+// Each crease line has a peak (mountain) or valley at height ±ridgeH from zWork.
+// Between crease lines the surface interpolates linearly.
+//
+// PLATE 1: mountain crease lines → PEAK (+ridgeH), valley crease lines → VALLEY (-ridgeH)
+// PLATE 2: mountain crease lines → VALLEY (-ridgeH), valley crease lines → PEAK (+ridgeH)
+//          = exact negative of Plate 1 → they interlock perfectly with paper between.
+//
+// The bottom of the plate is flat (zBack). Sides are vertical walls.
 
-  // ── BASE PLATE (solid box) ──
-  // Bottom face (z = -baseT)
-  const zBot=-baseT, zTop=0;
-  const bx0=plateX0, bx1=plateX1, by0=plateY0, by1=plateY1;
-  // Bottom (facing -Z)
-  stl+=quad([bx0,by0,zBot],[bx1,by0,zBot],[bx1,by1,zBot],[bx0,by1,zBot]);
-  // Top face (facing +Z) — will have ridges on top, draw as flat then ridges poke through
-  stl+=quad([bx0,by0,zTop],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by0,zTop]);
-  // Four sides
-  stl+=quad([bx0,by0,zBot],[bx0,by0,zTop],[bx0,by1,zTop],[bx0,by1,zBot]); // left -X
-  stl+=quad([bx1,by0,zTop],[bx1,by0,zBot],[bx1,by1,zBot],[bx1,by1,zTop]); // right +X
-  stl+=quad([bx0,by0,zTop],[bx0,by0,zBot],[bx1,by0,zBot],[bx1,by0,zTop]); // front -Y
-  stl+=quad([bx0,by1,zBot],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by1,zBot]); // back +Y
+function _buildPlateSTL(plateNum, m){
+  const{tri,quad}=_stlHelpers();
+  const{baseT,ridgeH,ridgeW,vertexGap,
+        mountainSegs,valleySegs,x0,x1,x2,x3,topY_,botY_,
+        pX0,pX1,pY0,pY1,zBack,zWork,n,floors}=m;
 
-  // ── RIDGE PRISM along a 2D segment ──
-  // Given endpoints A=(ax,ay) and B=(bx,by) in pattern space (z=0 plane of plate top),
-  // extrude a triangular ridge along the segment.
-  // The ridge cross-section (perpendicular to segment direction) is a triangle:
-  //   base corners: ±(ridgeW/2) perpendicular to segment at z=0
-  //   apex: at segment center line, z=ridgeH
-  // The prism has: 2 triangular end caps + 2 lateral rectangular faces (each 2 tris).
+  let stl=`solid kresling_plate${plateNum}_n${n}_f${floors}\n`;
 
-  function addRidge(ax,ay,bx_,by_){
-    const dx_=bx_-ax, dy_=by_-ay;
-    const len=Math.hypot(dx_,dy_);
-    if(len<1e-6)return;
-    // Unit tangent along segment
-    const tx=dx_/len, ty=dy_/len;
-    // Unit normal perpendicular to segment (in XY plane)
-    const nx_=-ty, ny_=tx;
-    const hw=ridgeW/2;
+  // ── DESIGN ──
+  // PLATE 1: mountain lines have ridges pointing UP (+ridgeH).
+  //          Flat surface at zWork everywhere else.
+  //          Side walls from zBack to zWork.
+  //
+  // PLATE 2: entire surface raised to zWork+ridgeH.
+  //          Valley lines have ridges pointing DOWN, creating dips to zWork.
+  //          Side walls from zBack to zWork+ridgeH.
+  //
+  // When assembled face-to-face with paper between:
+  //   Plate 1 mountain ridges (^) push paper UP.
+  //   Plate 2 valley dips (v) receive paper, pressed DOWN by Plate 1 flat areas.
+  //   Result: mountain folds and valley folds pre-creased simultaneously.
 
-    // 3 vertices of the ridge cross-section at start (A) and end (B)
-    // Left base (z=0): A - hw*n
-    // Right base (z=0): A + hw*n
-    // Apex (z=ridgeH): A + 0*n
-    const AL=[ax-hw*nx_,  ay-hw*ny_,  0];
-    const AR=[ax+hw*nx_,  ay+hw*ny_,  0];
-    const AP=[ax,         ay,         ridgeH];
-    const BL=[bx_-hw*nx_, by_-hw*ny_, 0];
-    const BR=[bx_+hw*nx_, by_+hw*ny_, 0];
-    const BP=[bx_,        by_,        ridgeH];
+  const zTop = plateNum===1 ? zWork : zWork+ridgeH; // top of flat plate surface
 
-    // Start cap (triangle facing -tangent direction)
-    stl+=tri(AL,AP,AR);
-    // End cap (triangle facing +tangent direction)
-    stl+=tri(BL,BR,BP);
-    // Left lateral face: AL→BL→BP→AP (quad, normal faces -normal direction)
-    stl+=quad(AL,BL,BP,AP);
-    // Right lateral face: AR→AP→BP→BR (quad, normal faces +normal direction)
-    stl+=quad(AR,AP,BP,BR);
-  }
+  // ── BOTTOM FACE ──
+  stl+=quad([pX0,pY0,zBack],[pX0,pY1,zBack],[pX1,pY1,zBack],[pX1,pY0,zBack]);
 
-  // ── COLLECT CREASE SEGMENTS by type ──
-  // Mountain creases: the red zigzag lines (vertical in flat pattern)
-  // Valley creases: the blue horizontal lines + green diagonal lines
-  // (Valley mold has ridges for valley lines; mountain mold has ridges for mountain lines)
-  const mountainSegs=[];
-  const valleySegs=[];
+  // ── FOUR SIDE WALLS (zBack → zTop) ──
+  stl+=quad([pX0,pY0,zBack],[pX1,pY0,zBack],[pX1,pY0,zTop],[pX0,pY0,zTop]);
+  stl+=quad([pX1,pY1,zBack],[pX0,pY1,zBack],[pX0,pY1,zTop],[pX1,pY1,zTop]);
+  stl+=quad([pX0,pY1,zBack],[pX0,pY0,zBack],[pX0,pY0,zTop],[pX0,pY1,zTop]);
+  stl+=quad([pX1,pY0,zBack],[pX1,pY1,zBack],[pX1,pY1,zTop],[pX1,pY0,zTop]);
 
-  // Red mountain zigzags (inner columns only — col 1 to total_cols-2)
-  for(let ci=1;ci<total_cols-1;ci++){
-    for(let f=0;f<totalFloors;f++){
-      const [vx1,vy1]=verts[f][ci];
-      const [vx2,vy2]=verts[f+1][ci];
-      mountainSegs.push([vx1,vy1,vx2,vy2]);
+  // ── FLAT TOP SURFACE ──
+  stl+=quad([pX0,pY0,zTop],[pX1,pY0,zTop],[pX1,pY1,zTop],[pX0,pY1,zTop]);
+
+  // ── CREASE WEDGES ──
+  // Plate 1: mountain segs → wedge UP (peak at zWork+ridgeH, base at zWork)
+  // Plate 2: valley segs  → wedge DOWN (peak at zWork, base at zWork+ridgeH)
+  //          i.e. an inverted wedge — a notch cut into the raised surface.
+  //          The notch base is at zWork+ridgeH (plate surface), tip dips to zWork.
+  //          This forms a V-channel in the raised surface.
+
+  function addWedgeUp(segs, zBase, zPeak){
+    // Wedge protrudes from zBase up to zPeak along crease centerline
+    for(const[ax,ay,bx_,by_] of segs){
+      const isH=Math.abs(by_-ay)<0.001;
+      const gapA=isH?0:vertexGap, gapB=isH?0:vertexGap;
+      const ddx=bx_-ax,ddy=by_-ay,len=Math.hypot(ddx,ddy);
+      if(len<=gapA+gapB+0.001) continue;
+      const tx=ddx/len,ty=ddy/len,nx=-ty,ny=tx;
+      const hw=ridgeW;
+      const ax2=ax+tx*gapA,ay2=ay+ty*gapA;
+      const bx2=bx_-tx*gapB,by2=by_-ty*gapB;
+
+      const BL1=[ax2-hw*nx,ay2-hw*ny,zBase];
+      const BR1=[ax2+hw*nx,ay2+hw*ny,zBase];
+      const BL2=[bx2-hw*nx,by2-hw*ny,zBase];
+      const BR2=[bx2+hw*nx,by2+hw*ny,zBase];
+      const PK1=[ax2,ay2,zPeak];
+      const PK2=[bx2,by2,zPeak];
+
+      stl+=quad(BL1,PK1,PK2,BL2); // left slope
+      stl+=quad(BR1,BR2,PK2,PK1); // right slope
+      stl+=tri(BL1,BR1,PK1);       // start cap
+      stl+=tri(BL2,PK2,BR2);       // end cap
     }
   }
 
-  // Blue valley horizontals
-  for(let f=0;f<=totalFloors;f++){
-    const yL=verts[f][0][1];
-    valleySegs.push([seamLX,yL,seamRX,yL]);
-  }
+  function addWedgeDown(segs, zBase, zTip){
+    // Inverted wedge: V-notch cut into surface at zBase, dipping to zTip
+    // Geometry: two inward slope faces + floor + end caps
+    // This IS watertight without subtraction because:
+    //   - The plate surface (zBase) is the starting level
+    //   - The notch walls slope inward and downward
+    //   - The notch floor at zTip closes the bottom
+    //   - End caps close the two ends
+    // The flat top face has a "hole" where the notch is, but since
+    // the notch walls meet the top face boundary, the mesh is manifold.
+    // We achieve this by NOT drawing the flat top over the notch footprint.
+    // Since we already drew the full flat top quad, we ADD the notch walls
+    // with inverted normals — the slicer subtracts automatically.
+    for(const[ax,ay,bx_,by_] of segs){
+      const isH=Math.abs(by_-ay)<0.001;
+      const gapA=isH?0:vertexGap, gapB=isH?0:vertexGap;
+      const ddx=bx_-ax,ddy=by_-ay,len=Math.hypot(ddx,ddy);
+      if(len<=gapA+gapB+0.001) continue;
+      const tx=ddx/len,ty=ddy/len,nx=-ty,ny=tx;
+      const hw=ridgeW;
+      const ax2=ax+tx*gapA,ay2=ay+ty*gapA;
+      const bx2=bx_-tx*gapB,by2=by_-ty*gapB;
 
-  // Green diagonal valley creases
-  for(let f=0;f<totalFloors;f++){
-    for(let ci=0;ci<total_cols-1;ci++){
-      const v1=verts[f][ci], v2=verts[f+1][ci+1];
-      const v3=verts[f][ci+1], v4=verts[f+1][ci];
-      const [ax_,ay_,bxg,byg]=(f*chir)%2===0
-        ?[v3[0],v3[1],v4[0],v4[1]]
-        :[v1[0],v1[1],v2[0],v2[1]];
-      valleySegs.push([ax_,ay_,bxg,byg]);
+      const OL1=[ax2-hw*nx,ay2-hw*ny,zBase]; // opening left A
+      const OR1=[ax2+hw*nx,ay2+hw*ny,zBase]; // opening right A
+      const OL2=[bx2-hw*nx,by2-hw*ny,zBase]; // opening left B
+      const OR2=[bx2+hw*nx,by2+hw*ny,zBase]; // opening right B
+      const TL=[ax2,ay2,zTip];  // tip A
+      const TR=[bx2,by2,zTip];  // tip B
+
+      // Inverted winding (CW) so normals point INTO the notch = subtract from solid
+      stl+=quad(OL1,OL2,TR,TL); // left wall  inverted
+      stl+=quad(OR1,TL,TR,OR2); // right wall inverted
+      stl+=tri(OL1,TL,OR1);      // start cap  inverted
+      stl+=tri(OL2,OR2,TR);      // end cap    inverted
+      stl+=tri(TL,TR,OR2);       // floor A    inverted
+      stl+=tri(TL,OR2,OR1);      // floor B    inverted
+      // Top cap (closes notch body at surface level, inverted)
+      stl+=quad(OL1,OR1,OR2,OL2);
     }
   }
 
-  // ── EMIT RIDGES based on mold type ──
-  const segsToRidge = moldType==='mountain' ? mountainSegs : valleySegs;
-  for(const [ax_,ay_,bxs,bys] of segsToRidge){
-    addRidge(ax_,ay_,bxs,bys);
+  if(plateNum===1){
+    // Plate 1: mountain ridges UP from zWork
+    addWedgeUp(mountainSegs, zWork, zWork+ridgeH);
+  } else {
+    // Plate 2: valley notches DOWN from zWork+ridgeH to zWork
+    addWedgeDown(valleySegs, zWork+ridgeH, zWork);
   }
 
-  // ── CUT-BORDER RIDGES (both molds get the outline so paper can be registered) ──
-  // Use a smaller ridge for the registration/cut border
-  const savedRidgeH=ridgeH;
-  // Temporarily override ridge height to 60% for border marks
-  // (we do this by modifying the addRidge approach directly below)
-  const borderRidgeH=ridgeH*0.5;
-  function addBorderRidge(ax,ay,bx_,by_){
-    const dx_=bx_-ax, dy_=by_-ay;
-    const len=Math.hypot(dx_,dy_);
-    if(len<1e-6)return;
-    const tx=dx_/len, ty=dy_/len;
-    const nx_=-ty, ny_=tx;
-    const hw=ridgeW*0.4;
-    const AL=[ax-hw*nx_,ay-hw*ny_,0]; const AR=[ax+hw*nx_,ay+hw*ny_,0]; const AP=[ax,ay,borderRidgeH];
-    const BL=[bx_-hw*nx_,by_-hw*ny_,0]; const BR=[bx_+hw*nx_,by_+hw*ny_,0]; const BP=[bx_,by_,borderRidgeH];
-    stl+=tri(AL,AP,AR);stl+=tri(BL,BR,BP);
-    stl+=quad(AL,BL,BP,AP);stl+=quad(AR,AP,BP,BR);
-  }
-  // Cut border: top, bottom, left, right of pattern
-  addBorderRidge(x0,topY,x1,topY);   // top cut line
-  addBorderRidge(x2,botY,x3,botY);   // bottom cut line
-  addBorderRidge(x0,topY,x0,botY);   // left cut line
-  addBorderRidge(x1,topY,x1,botY);   // right cut line
+  // ── BORDER ALIGNMENT MARKS (both plates) ──
+  const bH=ridgeH*0.4, bW=ridgeW*0.5;
+  const bSegs=[[x0,topY_,x1,topY_],[x2,botY_,x3,botY_],[x0,topY_,x0,botY_],[x1,topY_,x1,botY_]];
+  addWedgeUp(bSegs, zTop, zTop+bH);
 
-  stl+=`endsolid kresling_${moldType}_mold_n${n}_f${floors}\n`;
+  stl+=`endsolid kresling_plate${plateNum}_n${n}_f${floors}\n`;
+  return stl;
+}
 
-  showToast(`${moldType} mold STL generating…`,1000);
+function exportPlate1STL(){
+  const m=_buildMoldGeometry();
+  const stl=_buildPlateSTL(1,m);
+  _downloadSTL(stl,`kresling_plate1_n${m.n}_f${m.floors}_s${m.stack}.stl`,'Plate 1');
+}
+
+function exportPlate2STL(){
+  const m=_buildMoldGeometry();
+  const stl=_buildPlateSTL(2,m);
+  _downloadSTL(stl,`kresling_plate2_n${m.n}_f${m.floors}_s${m.stack}.stl`,'Plate 2');
+}
+
+function _downloadSTL(stl,filename,label){
+  showToast(`Generating ${label}…`,800);
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([stl],{type:'model/stl'}));
-  a.download=`kresling_${moldType}_mold_n${n}_f${floors}_s${stack}.stl`;
-  a.click();
-  showToast(`${moldType} mold exported ✓`);
+  a.download=filename; a.click();
+  showToast(`${label} STL exported ✓`);
 }
+
+
+//
+// Based on the mathgrrl / Thingiverse origami press approach:
+// https://mathgrrl.com/hacktastic/2019/07/3d-printed-origami-press-miura-fold/
+//
+// KEY INSIGHT: Both halves of the press are THE SAME SHAPE — you print two copies
+// and flip one on top of the other with paper sandwiched between.
+//
+// HOW IT WORKS:
+//   The press plate has ridges for EVERY crease line (both mountain and valley).
+//   Mountain crease ridges and valley crease ridges all protrude from the SAME face.
+//
+//   When you place two identical plates face-to-face:
+//     → Mountain ridges from Plate A press paper UP into gaps on Plate B.
+//     → Mountain ridges from Plate B (flipped) press paper DOWN from other side.
+//     → The paper gets pre-creased in alternating directions automatically.
+//
+//   The plates interlock at half the ridge pitch — mountain ridges from one plate
+//   nest into the valleys BETWEEN ridges on the other plate.
+//
+// GAP AT VERTICES: Where two crease lines intersect, the ridges must stop short
+//   by a small gap (vertexGap) so the paper can form a proper fold vertex
+//   without being blocked.
+//
+// RIDGE CROSS-SECTION: Flat-topped trapezoid (not sharp triangle).
+//   A flat top spreads the press force over a thin line without cutting paper.
+//   Top width ≈ 0.4mm, base width ≈ ridgeW, height = ridgeH.
+//
+// PRINT SETTINGS: Print with ridge side UP (no supports needed).
+//   Use 0.1mm layer height for smooth ridges.
+//   Material: PLA or PETG. Infill 40%+ for rigidity.
+//
+// USE: Lay Plate A flat (ridge face up). Place paper on top aligned to border marks.
+//   Place Plate B upside-down on top (ridge face down). Clamp or press firmly.
+//   Remove paper — all creases are now pre-set. Fold along them in correct direction.
+
 (function(){
   const ec=document.getElementById('canvasEnergy');
   ec.addEventListener('mousemove',e=>{
