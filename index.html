@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kresling Crease Generator</title>
+<title>Kresling Crease Generator v23</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -129,7 +129,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
     </select>
     <button class="tab-btn" onclick="importPreset()" title="Import preset JSON">⬆ Import</button>
     <button class="tab-btn" onclick="exportPreset()" title="Export current settings as JSON">⬇ Export</button>
-    <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:2px">S=svg P=pdf F=fit R=reset 3-9=sides Ctrl+Z=undo</span>
+    <select id="paper-select" onchange="setPaperSize(this.value)" title="Paper size" style="font-size:11px;padding:3px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;outline:none">
+      <option value="A4">A4</option>
+      <option value="Letter">Letter</option>
+      <option value="A3">A3</option>
+    </select>
+    <button class="tab-btn" id="units-btn" onclick="toggleUnits()" title="Toggle cm / inches">cm</button>
+    <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:2px">S=svg P=pdf F=fit R=reset A=rotate V=fold 3-9=sides Ctrl+Z=undo</span>
     <div id="validity-badge" class="badge ok" style="margin-left:auto">Foldable</div>
   </div>
 
@@ -139,21 +145,20 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
       <div class="sidebar-resize" id="sidebarResize"></div>
 
       <div class="sec-label">Geometry</div>
-      <div class="ctrl"><label>Diameter (cm)</label><div class="ctrl-right"><input type="range" id="r-dia" min="1" max="12" step="0.5" value="3"><input class="num-inp" id="n-dia" type="number" min="1" max="12" step="0.5" value="3"></div></div>
-      <div class="ctrl"><label>Height (cm)</label><div class="ctrl-right"><input type="range" id="r-height" min="2" max="40" step="0.5" value="20"><input class="num-inp" id="n-height" type="number" min="2" max="40" step="0.5" value="20"></div></div>
+      <div class="ctrl"><label>Diameter (<span class="u-lbl">cm</span>)</label><div class="ctrl-right"><input type="range" id="r-dia" min="1" max="12" step="0.5" value="3"><input class="num-inp" id="n-dia" type="number" min="1" max="12" step="0.5" value="3"></div></div>
+      <div class="ctrl"><label>Height (<span class="u-lbl">cm</span>)</label><div class="ctrl-right"><input type="range" id="r-height" min="2" max="40" step="0.5" value="20"><input class="num-inp" id="n-height" type="number" min="2" max="40" step="0.5" value="20"></div></div>
       <div class="ctrl"><label>Sides (n)</label><div class="ctrl-right"><input type="range" id="r-n" min="3" max="20" step="1" value="6"><input class="num-inp" id="n-n" type="number" min="3" max="20" step="1" value="6"></div></div>
       <div class="ctrl"><label>Floors</label><div class="ctrl-right"><input type="range" id="r-floors" min="2" max="20" step="1" value="10"><input class="num-inp" id="n-floors" type="number" min="2" max="20" step="1" value="10"></div></div>
       <div class="ctrl"><label>Angle BR (°)</label><div class="ctrl-right"><input type="range" id="r-angle" min="60" max="140" step="0.5" value="100"><input class="num-inp" id="n-angle" type="number" min="60" max="140" step="0.5" value="100"></div></div>
-      <div class="ctrl"><label>Stack count</label><div class="ctrl-right"><input type="range" id="r-stack" min="1" max="4" step="1" value="1"><input class="num-inp" id="n-stack" type="number" min="1" max="4" step="1" value="1"></div></div>
       <div class="ctrl ctrl-select" style="padding:3px 4px">
         <label>Chirality</label>
         <select id="chir"><option value="1">Right-hand</option><option value="-1">Left-hand</option></select>
       </div>
 
       <div class="sec-label">Layout</div>
-      <div class="ctrl"><label>End ext (cm)</label><div class="ctrl-right"><input type="range" id="r-ext" min="0" max="6" step="0.1" value="2"><input class="num-inp" id="n-ext" type="number" min="0" max="6" step="0.1" value="2"></div></div>
-      <div class="ctrl"><label>Seam left (cm)</label><div class="ctrl-right"><input type="range" id="r-seaml" min="0" max="6" step="0.1" value="1.4"><input class="num-inp" id="n-seaml" type="number" min="0" max="6" step="0.1" value="1.4"></div></div>
-      <div class="ctrl"><label>Seam right (cm)</label><div class="ctrl-right"><input type="range" id="r-seamr" min="0" max="6" step="0.1" value="0"><input class="num-inp" id="n-seamr" type="number" min="0" max="6" step="0.1" value="0"></div></div>
+      <div class="ctrl"><label>End ext (<span class="u-lbl">cm</span>)</label><div class="ctrl-right"><input type="range" id="r-ext" min="0" max="6" step="0.1" value="2"><input class="num-inp" id="n-ext" type="number" min="0" max="6" step="0.1" value="2"></div></div>
+      <div class="ctrl"><label>Seam left (<span class="u-lbl">cm</span>)</label><div class="ctrl-right"><input type="range" id="r-seaml" min="0" max="6" step="0.1" value="1.4"><input class="num-inp" id="n-seaml" type="number" min="0" max="6" step="0.1" value="1.4"></div></div>
+      <div class="ctrl"><label>Seam right (<span class="u-lbl">cm</span>)</label><div class="ctrl-right"><input type="range" id="r-seamr" min="0" max="6" step="0.1" value="0"><input class="num-inp" id="n-seamr" type="number" min="0" max="6" step="0.1" value="0"></div></div>
       <div class="ctrl"><label>Extra cols</label><div class="ctrl-right"><input type="range" id="r-extcols" min="0" max="4" step="1" value="1"><input class="num-inp" id="n-extcols" type="number" min="0" max="4" step="1" value="1"></div></div>
       <div class="ctrl-check" style="padding:2px 4px 6px">
         <input type="checkbox" id="seam-auto-cb" checked>
@@ -168,12 +173,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
           <input class="num-inp" id="n-scale" type="number" min="10" max="200" step="1" value="100" style="width:50px">
         </div>
       </div>
-      <div class="ctrl-check"><input type="checkbox" id="showA4" checked><label for="showA4">Show A4 border</label></div>
+      <div class="ctrl-check"><input type="checkbox" id="showA4" checked><label for="showA4">Show <span id="paper-border-lbl">A4</span> border</label></div>
       <div class="ctrl-check"><input type="checkbox" id="showGrid" checked><label for="showGrid">Show cm grid</label></div>
       <div class="ctrl-check"><input type="checkbox" id="showmv" checked><label for="showmv">Show M/V colors</label></div>
 
       <div class="sec-label">STL Export</div>
-      <div class="ctrl"><label>Wall (mil)</label><div class="ctrl-right"><input type="range" id="r-wallmm" min="1" max="5" step="1" value="5"><input class="num-inp" id="n-wallmm" type="number" min="1" max="5" step="1" value="5"></div></div>
+      <div class="ctrl"><label>Wall (mil)</label><div class="ctrl-right"><input type="range" id="r-wallmm" min="1" max="5" step="0.5" value="3"><input class="num-inp" id="n-wallmm" type="number" min="1" max="5" step="0.5" value="3"></div></div>
       <div class="ctrl"><label>Mold base (mm)</label><div class="ctrl-right"><input type="range" id="r-moldbase" min="1" max="10" step="0.5" value="3"><input class="num-inp" id="n-moldbase" type="number" min="1" max="10" step="0.5" value="3"></div></div>
       <div class="ctrl"><label>Ridge h (mm)</label><div class="ctrl-right"><input type="range" id="r-ridgeh" min="0.5" max="5" step="0.1" value="1.2"><input class="num-inp" id="n-ridgeh" type="number" min="0.5" max="5" step="0.1" value="1.2"></div></div>
       <div class="ctrl"><label>Ridge w (mm)</label><div class="ctrl-right"><input type="range" id="r-ridgew" min="0.3" max="3" step="0.1" value="0.6"><input class="num-inp" id="n-ridgew" type="number" min="0.3" max="3" step="0.1" value="0.6"></div></div>
@@ -185,9 +190,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
         <button class="center-tab active" id="ctab-crease" onclick="switchCenterTab('crease')">Crease pattern</button>
         <button class="center-tab" id="ctab-mold" onclick="switchCenterTab('mold')">Mold preview</button>
         <div class="mold-sub-tabs" id="mold-sub-tabs" style="display:none">
-          <button class="mold-tab active" id="mtab-mountain" onclick="switchMoldTab('mountain')">Plate 1 — mountain ^</button>
-          <button class="mold-tab" id="mtab-valley" onclick="switchMoldTab('valley')">Plate 2 — valley ^</button>
-          <button class="mold-tab" id="mtab-both" onclick="switchMoldTab('both')">Assembled</button>
+          <button class="mold-tab active" id="mtab-mountain" onclick="switchMoldTab('mountain')">Mountain</button>
+          <button class="mold-tab" id="mtab-valley" onclick="switchMoldTab('valley')">Valley</button>
+          <button class="mold-tab" id="mtab-both" onclick="switchMoldTab('both')">Both</button>
         </div>
       </div>
       <!-- Crease pattern pane -->
@@ -204,10 +209,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
           <div class="stat"><div class="stat-l">Bistable</div><div class="stat-v" id="s-bi">—</div></div>
           <div class="stat"><div class="stat-l">A4 fit</div><div class="stat-v" id="s-fit">—</div></div>
           <div class="stat"><div class="stat-l">Scale</div><div class="stat-v" id="s-scale">—</div></div>
-          <div class="stat"><div class="stat-l">Outer ⌀</div><div class="stat-v" id="s-od">—</div></div>
-          <div class="stat"><div class="stat-l">Inner ⌀ (fold)</div><div class="stat-v" id="s-id">—</div></div>
-          <div class="stat"><div class="stat-l">Tube h (fold)</div><div class="stat-v" id="s-th">—</div></div>
-          <div class="stat"><div class="stat-l">Mat. thick</div><div class="stat-v" id="s-fw">—</div></div>
         </div>
         <div class="mv-legend">
           <span><span class="mv-dot" style="background:#378ADD"></span>Blue — valley</span>
@@ -236,6 +237,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
           <button class="sub-toggle" id="btn-tog-3d" onclick="toggleSubPanel('3d')">▼</button>
           <span class="sub-panel-title">3D Tube</span>
           <button class="sub-expand" id="anim-btn" onclick="toggleAutoRotate()" title="Auto-rotate [A]">↻</button>
+          <button class="sub-expand" id="fold-btn" onclick="toggleFoldAnim()" title="Fold/unfold animation [V]">▶</button>
           <div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0;margin:0 3px">
             <span style="font-size:9px;color:var(--text3);white-space:nowrap;font-family:'JetBrains Mono',monospace">Cmpr</span>
             <input type="range" id="r-compress" min="0" max="95" step="1" value="0" style="flex:1;min-width:0;height:3px;accent-color:var(--accent)">
@@ -268,10 +270,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
     <button onclick="exportPDF()">⬇ PDF (print)</button>
     <button onclick="exportDXF()">⬇ DXF</button>
     <button onclick="exportSTL()">⬇ STL (tube)</button>
-    <button onclick="exportPlate1STL()" title="Plate 1: mountain ridges ^ press down, valley grooves V receive plate 2 ridges">⬇ STL (plate 1 — mountain ^)</button>
-    <button onclick="exportPlate2STL()" title="Plate 2: valley ridges ^ press up, mountain grooves V receive plate 1 ridges">⬇ STL (plate 2 — valley ^)</button>
+    <button onclick="exportSTEP()">⬇ STEP</button>
+    <button onclick="exportMoldSTL('mountain')">⬇ STL (mountain mold)</button>
+    <button onclick="exportMoldSTL('valley')">⬇ STL (valley mold)</button>
     <div class="sep"></div>
-    <button onclick="autoFitA4()">↔ Auto-fit A4</button>
+    <button onclick="autoFitA4()" id="autofit-btn">↔ Auto-fit <span id="autofit-lbl">A4</span></button>
     <button onclick="undo()" title="Undo (Ctrl+Z)">↩ Undo</button>
     <button onclick="redo()" title="Redo (Ctrl+Y)">↪ Redo</button>
     <button onclick="resetDefaults()">↺ Reset</button>
@@ -281,7 +284,137 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
 </div>
 
 <script>
-const A4_W=21.0, A4_H=29.7;
+// ─── PAPER SIZE SYSTEM ───
+// All internal geometry is always stored and computed in cm.
+// PAPER_W / PAPER_H drive the canvas border and export page dimensions.
+const PAPER_SIZES={
+  A4:   {w:21.0,   h:29.7,  label:'A4'},
+  Letter:{w:21.59, h:27.94, label:'Letter'},
+  A3:   {w:29.7,   h:42.0,  label:'A3'},
+};
+let currentPaper='A4';
+let PAPER_W=21.0, PAPER_H=29.7; // cm — updated by setPaperSize()
+
+function setPaperSize(key){
+  if(!PAPER_SIZES[key])return;
+  currentPaper=key;
+  PAPER_W=PAPER_SIZES[key].w;
+  PAPER_H=PAPER_SIZES[key].h;
+  const lbl=document.getElementById('paper-border-lbl');
+  if(lbl)lbl.textContent=PAPER_SIZES[key].label;
+  const afl=document.getElementById('autofit-lbl');
+  if(afl)afl.textContent=PAPER_SIZES[key].label;
+  _lastBoundsKey=''; // invalidate bounds cache
+  draw();
+  showToast(`Paper: ${PAPER_SIZES[key].label} (${PAPER_W}×${PAPER_H} cm)`,1600);
+}
+
+// ─── UNITS SYSTEM ───
+// Display unit for sidebar inputs and stats bar. Internal values always in cm.
+// Conversion: 1 inch = 2.54 cm
+let useInches=false;
+const IN_PER_CM=1/2.54;
+
+// Fields that are in cm and should convert when toggling units
+// Each entry: [sliderId, numberId, cmMin, cmMax, cmStep, cmDefault]
+const CM_FIELDS=[
+  ['r-dia',   'n-dia',   1,  12, 0.5,  3  ],
+  ['r-height','n-height',2,  40, 0.5,  20 ],
+  ['r-ext',   'n-ext',   0,  6,  0.1,  2  ],
+  ['r-seaml', 'n-seaml', 0,  6,  0.1,  1.4],
+  ['r-seamr', 'n-seamr', 0,  6,  0.1,  0  ],
+];
+
+function cmToDisp(cm){ return useInches ? +(cm*IN_PER_CM).toFixed(4) : +cm.toFixed(4); }
+function dispToCm(v){  return useInches ? v*2.54 : v; }
+function unitLabel(){  return useInches ? 'in' : 'cm'; }
+
+function toggleUnits(){
+  // Read current cm values before converting display
+  const currentCm={};
+  CM_FIELDS.forEach(([rid,nid])=>{
+    const n=document.getElementById(nid);
+    // value is currently in old display unit → convert to cm first
+    const raw=parseFloat(n.value)||0;
+    currentCm[nid]=useInches? raw*2.54 : raw; // old unit → cm
+  });
+
+  useInches=!useInches;
+  const ul=unitLabel();
+
+  // Update unit label spans in sidebar
+  document.querySelectorAll('.u-lbl').forEach(el=>el.textContent=ul);
+  // Update units button label
+  const btn=document.getElementById('units-btn');
+  if(btn){btn.textContent=ul;btn.classList.toggle('active',useInches);}
+
+  // Update each CM field: convert stored cm value to new display unit, update slider bounds
+  CM_FIELDS.forEach(([rid,nid,cmMin,cmMax,cmStep,cmDef])=>{
+    const r=document.getElementById(rid), n=document.getElementById(nid);
+    if(!r||!n)return;
+    const newMin=cmToDisp(cmMin), newMax=cmToDisp(cmMax), newStep=cmToDisp(cmStep);
+    r.min=newMin; r.max=newMax; r.step=newStep;
+    n.min=newMin; n.max=newMax; n.step=newStep;
+    const disp=cmToDisp(currentCm[nid]);
+    r.value=disp; n.value=disp;
+  });
+
+  draw();
+  showToast(`Units: ${useInches?'inches':'centimetres'}`,1400);
+}
+
+// Override getV for cm fields: always returns cm regardless of display unit
+function getVcm(id){
+  const raw=parseFloat(document.getElementById('n-'+id).value)||0;
+  return useInches ? raw*2.54 : raw;
+}
+
+// ─── FOLD ANIMATION ───
+let foldAnim=false, foldAnimFrame=null, foldDir=1, _lastFoldTime=0;
+const FOLD_SPEED=40; // compress units per second (0-95 range)
+
+function toggleFoldAnim(){
+  foldAnim=!foldAnim;
+  const btn=document.getElementById('fold-btn');
+  if(btn){
+    btn.textContent=foldAnim?'■':'▶';
+    btn.style.color=foldAnim?'var(--accent2)':'';
+    btn.style.borderColor=foldAnim?'var(--accent)':'';
+    btn.title=foldAnim?'Stop animation [V]':'Fold/unfold animation [V]';
+  }
+  if(foldAnim){
+    // Start from current position, pick direction toward nearest endpoint
+    const cur=parseFloat(document.getElementById('n-compress').value)||0;
+    foldDir=(cur<47)?1:-1;
+    _lastFoldTime=performance.now();
+    stepFoldAnim();
+  } else {
+    if(foldAnimFrame){cancelAnimationFrame(foldAnimFrame);foldAnimFrame=null;}
+  }
+  showToast(foldAnim?'Fold animation on':'Fold animation off',1200);
+}
+
+function stepFoldAnim(){
+  if(!foldAnim)return;
+  const now=performance.now();
+  const dt=Math.min((now-_lastFoldTime)/1000, 0.1);
+  _lastFoldTime=now;
+
+  const el=document.getElementById('r-compress');
+  const nel=document.getElementById('n-compress');
+  let cur=parseFloat(el.value)||0;
+  cur+=foldDir*FOLD_SPEED*dt;
+
+  if(cur>=95){cur=95;foldDir=-1;}
+  else if(cur<=0){cur=0;foldDir=1;}
+
+  el.value=cur; nel.value=Math.round(cur);
+  draw3d();
+  drawEnergyDebounced();
+  foldAnimFrame=requestAnimationFrame(stepFoldAnim);
+}
+
+const A4_W=21.0, A4_H=29.7; // kept for SVG/PDF export fallback — use PAPER_W/PAPER_H in drawing
 let currentPanelTab='3d';
 let panelMaximized=false;
 
@@ -297,7 +430,7 @@ let flatDragging=false, flatLastMouse={x:0,y:0};
 const paramPairs=[
   ['r-dia','n-dia'],['r-height','n-height'],['r-n','n-n'],['r-floors','n-floors'],
   ['r-angle','n-angle'],['r-ext','n-ext'],['r-seaml','n-seaml'],['r-seamr','n-seamr'],
-  ['r-extcols','n-extcols'],['r-stack','n-stack'],['r-scale','n-scale'],['r-compress','n-compress'],
+  ['r-extcols','n-extcols'],['r-scale','n-scale'],['r-compress','n-compress'],
   ['r-wallmm','n-wallmm'],['r-moldbase','n-moldbase'],['r-ridgeh','n-ridgeh'],['r-ridgew','n-ridgew'],
 ];
 
@@ -320,12 +453,12 @@ function initRightPanelResize(){
 
 // ─── PRESETS ───
 const PRESETS={
-  bistable6: {dia:4,height:16,n:6,floors:8,angle:105,ext:1.5,seaml:1.57,seamr:1.57,extcols:1,stack:1,scale:100,compress:0,wallmm:5},
-  bistable8: {dia:5,height:20,n:8,floors:10,angle:100,ext:2,seaml:1.96,seamr:1.96,extcols:1,stack:1,scale:100,compress:0,wallmm:5},
-  monostable:{dia:3,height:12,n:6,floors:6,angle:120,ext:1,seaml:0,seamr:0,extcols:0,stack:1,scale:100,compress:0,wallmm:5},
-  tower:     {dia:2.5,height:30,n:6,floors:16,angle:95,ext:1.5,seaml:1.31,seamr:1.31,extcols:1,stack:2,scale:80,compress:0,wallmm:5},
-  flat:      {dia:8,height:8,n:12,floors:4,angle:90,ext:1,seaml:0,seamr:0,extcols:0,stack:1,scale:60,compress:0,wallmm:5},
-  compact:   {dia:3,height:6,n:5,floors:4,angle:110,ext:1,seaml:1.88,seamr:1.88,extcols:1,stack:1,scale:100,compress:0,wallmm:5},
+  bistable6: {dia:4,height:16,n:6,floors:8,angle:105,ext:1.5,seaml:1.57,seamr:1.57,extcols:1,scale:100,compress:0,wallmm:3},
+  bistable8: {dia:5,height:20,n:8,floors:10,angle:100,ext:2,seaml:1.96,seamr:1.96,extcols:1,scale:100,compress:0,wallmm:3},
+  monostable:{dia:3,height:12,n:6,floors:6,angle:120,ext:1,seaml:0,seamr:0,extcols:0,scale:100,compress:0,wallmm:3},
+  tower:     {dia:2.5,height:30,n:6,floors:16,angle:95,ext:1.5,seaml:1.31,seamr:1.31,extcols:1,scale:80,compress:0,wallmm:3},
+  flat:      {dia:8,height:8,n:12,floors:4,angle:90,ext:1,seaml:0,seamr:0,extcols:0,scale:60,compress:0,wallmm:3},
+  compact:   {dia:3,height:6,n:5,floors:4,angle:110,ext:1,seaml:1.88,seamr:1.88,extcols:1,scale:100,compress:0,wallmm:3},
 };
 
 function loadPreset(key){
@@ -352,7 +485,7 @@ function showToast(msg,ms=2200){
 }
 
 // ─── PRESET IMPORT / EXPORT ───
-const PRESET_KEYS=['dia','height','n','floors','angle','ext','seaml','seamr','extcols','stack','scale','compress','wallmm'];
+const PRESET_KEYS=['dia','height','n','floors','angle','ext','seaml','seamr','extcols','scale','compress','wallmm'];
 
 function exportPreset(){
   const data={};
@@ -413,9 +546,9 @@ function toggleAutoRotate(){
 function stepAutoRotate(){
   if(!autoRotate)return;
   const now=performance.now();
-  const dt=Math.min((now-_lastRotateTime)/1000, 0.1); // cap at 100ms
+  const dt=Math.min((now-_lastRotateTime)/1000, 0.1);
   _lastRotateTime=now;
-  const speed=0.5; // radians per second
+  const speed=0.5;
   rotY+=speed*dt;
   draw3d();
   if(currentCenterTab==='mold'){moldRotY+=speed*dt;drawMold3d();}
@@ -424,10 +557,8 @@ function stepAutoRotate(){
 
 // ─── KEYBOARD SHORTCUTS ───
 document.addEventListener('keydown',e=>{
-  // Ctrl+Z = undo, Ctrl+Y or Ctrl+Shift+Z = redo (works in any focus)
   if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();return;}
   if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();return;}
-
   const tag=document.activeElement.tagName;
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA')return;
   switch(e.key.toLowerCase()){
@@ -436,6 +567,7 @@ document.addEventListener('keydown',e=>{
     case 'f': e.preventDefault(); autoFitA4(); showToast('Auto-fit A4'); break;
     case 'r': e.preventDefault(); resetDefaults(); showToast('Reset to defaults'); break;
     case 'a': e.preventDefault(); toggleAutoRotate(); break;
+    case 'v': e.preventDefault(); toggleFoldAnim(); break;
     case 'z': flatZoom=Math.min(flatZoom*1.2,20);drawFlat(); break;
     case 'x': flatZoom=Math.max(flatZoom/1.2,1);if(flatZoom<=1){flatZoom=1;flatPanX=0;flatPanY=0;}drawFlat(); break;
     case 'arrowleft': {
@@ -459,13 +591,7 @@ document.addEventListener('keydown',e=>{
     showToast(`Sides = ${num}`,1200);
   }
 });
-// When extra cols = N, the outermost green diagonal on each side starts at
-// vertex col = -(extcols) floor 0  →  x_raw = -extcols*b ± dx
-// The seam line should sit at the leftmost x of that vertex.
-// Left seam covers from main pattern left edge (col=0, f=0: x=-dx) to
-// outermost extra vertex (col=-extcols, f=0: x=-extcols*b - dx) → width = extcols*b
-// Right seam: same by symmetry = extcols*b
-// The green diagonals in the extra cols span one side (b) each, so total seam = extcols*b
+
 let seamAutoMode=true;
 
 function computeAutoSeam(p,g){
@@ -497,7 +623,6 @@ function captureState(){
   paramPairs.forEach(([,nid])=>{ const el=document.getElementById(nid); if(el) state[nid]=el.value; });
   state['chir'] = document.getElementById('chir').value;
   state['seam-auto-cb'] = document.getElementById('seam-auto-cb').checked;
-  // Trim forward history
   history = history.slice(0, historyIdx+1);
   history.push(state);
   if(history.length > MAX_HISTORY) history.shift();
@@ -534,7 +659,7 @@ function redo(){
   showToast('Redo ✓', 1000);
 }
 
-// ─── DEBOUNCE for expensive recomputes (energy graph) ───
+// ─── DEBOUNCE ───
 function debounce(fn, ms){
   let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
 }
@@ -543,12 +668,12 @@ const drawEnergyDebounced = debounce(()=>drawEnergy(), 120);
 // ─── MEMOISED patternBounds ───
 let _lastBoundsKey='', _lastBounds=null;
 function patternBounds(p,g){
-  const key=`${p.n},${p.floors},${p.ext},${p.seaml},${p.seamr},${p.extcols},${p.stack},${p.chir},${p.scale},${g.b},${g.floor_h},${g.dx}`;
+  const key=`${p.n},${p.floors},${p.ext},${p.seaml},${p.seamr},${p.extcols},${p.chir},${p.scale},${g.b},${g.floor_h},${g.dx}`;
   if(key===_lastBoundsKey) return _lastBounds;
   _lastBoundsKey=key;
-  const{n,floors,ext,seaml,seamr,extcols,stack}=p;
+  const{n,floors,ext,seaml,seamr,extcols}=p;
   const{b,floor_h,dx}=g;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const col_min=-extcols,col_max=n+extcols;
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
   for(let f=0;f<=totalFloors;f++){
@@ -564,15 +689,14 @@ function patternBounds(p,g){
   return _lastBounds;
 }
 
-// ─── FLAT CANVAS HOVER (crease type highlight) ───
-let flatHoverPx=null; // {x,y} canvas pixels
+// ─── FLAT CANVAS HOVER ───
+let flatHoverPx=null;
 
 function getNearestCrease(px,py,verts,p,g,toC){
-  // Check all crease segments, return {type,dist}
-  const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
+  const{n,floors,ext,seaml,seamr,extcols,chir,scale}=p;
   const{b,floor_h,dx}=g;
   const col_min=-extcols,col_max=n+extcols,total_cols=col_max-col_min+1;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const olIdx=extcols,orIdx=extcols+n;
   const[x0,y0]=verts[0][olIdx],[x1]=verts[0][orIdx];
   const[,y3]=verts[totalFloors][orIdx];
@@ -586,7 +710,7 @@ function getNearestCrease(px,py,verts,p,g,toC){
     return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
   }
 
-  const THRESH=12; // px
+  const THRESH=12;
   let best={type:null,dist:Infinity,label:''};
 
   function check(ax,ay,bx,by,type,label){
@@ -595,16 +719,13 @@ function getNearestCrease(px,py,verts,p,g,toC){
     if(d<THRESH&&d<best.dist){best={type,dist:d,label};}
   }
 
-  // Blue horizontals
   for(let f=0;f<=totalFloors;f++){
     const yL=verts[f][0][1];
     check(seamLX,yL,seamRX,yL,'blue','Valley (horizontal)');
   }
-  // Red mountain
   for(let ci=1;ci<total_cols-1;ci++){
     for(let f=0;f<totalFloors;f++) check(verts[f][ci][0],verts[f][ci][1],verts[f+1][ci][0],verts[f+1][ci][1],'red','Mountain');
   }
-  // Green diagonal
   for(let f=0;f<totalFloors;f++){
     for(let ci=0;ci<total_cols-1;ci++){
       const v1=verts[f][ci],v2=verts[f+1][ci+1],v3=verts[f][ci+1],v4=verts[f+1][ci];
@@ -629,7 +750,6 @@ function bindPairs(){
     n.addEventListener('change',()=>captureState());
     n.addEventListener('keydown',e=>{if(e.key==='Enter'){n.blur();captureState();}});
   });
-  // Manual seam touch → disable auto
   ['r-seaml','n-seaml','r-seamr','n-seamr'].forEach(id=>{
     const el=document.getElementById(id);if(!el)return;
     el.addEventListener('pointerdown',()=>{seamAutoMode=false;const cb=document.getElementById('seam-auto-cb');if(cb)cb.checked=false;});
@@ -656,7 +776,7 @@ function initSidebarResize(){
     const w=Math.max(140,Math.min(480,startW+(e.clientX-startX)));
     sidebar.style.setProperty('--sidebar-w',w+'px');
     sidebar.style.width=w+'px';
-    drawFlat();// reflow flat canvas
+    drawFlat();
   });
   handle.addEventListener('pointerup',()=>{dragging=false;handle.classList.remove('dragging');});
 }
@@ -665,10 +785,10 @@ function getV(id){return parseFloat(document.getElementById('n-'+id).value);}
 function getBool(id){return document.getElementById(id).checked;}
 function getP(){
   return{
-    dia:getV('dia'),height:getV('height'),n:Math.round(getV('n')),
+    dia:getVcm('dia'),height:getVcm('height'),n:Math.round(getV('n')),
     floors:Math.round(getV('floors')),angle:getV('angle'),
-    ext:getV('ext'),seaml:getV('seaml'),seamr:getV('seamr'),
-    extcols:Math.round(getV('extcols')),stack:Math.round(getV('stack')),
+    ext:getVcm('ext'),seaml:getVcm('seaml'),seamr:getVcm('seamr'),
+    extcols:Math.round(getV('extcols')),
     scale:getV('scale')/100,compress:getV('compress')/100,
     wallmm:getV('wallmm'),
     moldbase:getV('moldbase'), ridgeh:getV('ridgeh'), ridgew:getV('ridgew'),
@@ -686,73 +806,30 @@ function computeGeometry(p){
   const vg=[green_dx,floor_h],vr=[dx,floor_h];
   const gr_angle=Math.acos(Math.max(-1,Math.min(1,(vg[0]*vr[0]+vg[1]*vr[1])/(Math.hypot(...vg)*Math.hypot(...vr)))))*180/Math.PI;
   const h0r=floor_h/R;
-  // Correct bistability condition based on Kresling geometry:
-  // bistable when the crease pattern produces two distinct stable states
-  // Condition: the diagonal (green) crease length must equal the side (blue) length
-  // when compressed — which happens when h0r satisfies the geometric closure condition.
-  // Using the proper criterion: bistable iff 0 < h0r < 2*sin(π/n) AND dx > 0
   const bistable=(h0r>0&&h0r<2*Math.sin(Math.PI/n)&&dx>0&&dx<b);
   const valid=dx<b&&floor_h>0&&b>0;
   return{b,floor_h,dx,red_len,green_len,gr_angle,h0r,bistable,valid,R,green_dx};
 }
+
 function updateStats(p,g){
   const bounds=patternBounds(p,g);
   const sW=bounds.w*p.scale,sH=bounds.h*p.scale;
-  const fitW=(sW/A4_W*100).toFixed(1),fitH=(sH/A4_H*100).toFixed(1);
-  const fits=sW<=A4_W&&sH<=A4_H;
-  document.getElementById('s-fh').textContent=g.floor_h.toFixed(3)+' cm';
-  document.getElementById('s-b').textContent=g.b.toFixed(3)+' cm';
-  document.getElementById('s-red').textContent=g.red_len.toFixed(3)+' cm';
-  document.getElementById('s-green').textContent=g.green_len.toFixed(3)+' cm';
-  document.getElementById('s-pw').textContent=bounds.w.toFixed(2)+' cm';
-  document.getElementById('s-ph').textContent=bounds.h.toFixed(2)+' cm';
+  const fitW=(sW/PAPER_W*100).toFixed(1),fitH=(sH/PAPER_H*100).toFixed(1);
+  const fits=sW<=PAPER_W&&sH<=PAPER_H;
+  const ul=unitLabel();
+  const d=useInches?x=>(x*IN_PER_CM).toFixed(3):x=>x.toFixed(3);
+  const d2=useInches?x=>(x*IN_PER_CM).toFixed(2):x=>x.toFixed(2);
+  document.getElementById('s-fh').textContent=d(g.floor_h)+' '+ul;
+  document.getElementById('s-b').textContent=d(g.b)+' '+ul;
+  document.getElementById('s-red').textContent=d(g.red_len)+' '+ul;
+  document.getElementById('s-green').textContent=d(g.green_len)+' '+ul;
+  document.getElementById('s-pw').textContent=d2(bounds.w)+' '+ul;
+  document.getElementById('s-ph').textContent=d2(bounds.h)+' '+ul;
   document.getElementById('s-h0r').textContent=g.h0r.toFixed(4);
   document.getElementById('s-bi').textContent=g.bistable?'✓ Yes':'✗ No';
   document.getElementById('s-scale').textContent=(p.scale*100).toFixed(0)+'%';
   document.getElementById('s-fit').textContent=fits?`✓ ${fitW}%W ${fitH}%H`:`✗ ${fitW}%W ${fitH}%H`;
   document.getElementById('s-fit').style.color=fits?'#4ade80':'#f87171';
-
-  // ── FOLDED TUBE DIMENSIONS ──
-  // Outer diameter = design diameter (constant — paper is inextensible)
-  const outerD = p.dia;
-  document.getElementById('s-od').textContent = outerD.toFixed(2)+' cm';
-
-  // Inner diameter when folded (at current compression level):
-  // The Kresling tube compresses by rotating each ring.
-  // At compression c (0=extended, 1=collapsed):
-  //   effective floor height: eFH = floor_h * (1 - c*0.98)
-  //   effective dx:           eDx = dx * (1 - c*0.5)
-  //   angular offset per ring: φ = eDx / R
-  //
-  // The inner diameter is defined as the diameter of the inscribed circle
-  // of the polygon at the mid-height between two rings, where the facets
-  // are most inward. For a Kresling tube this is the apothem of the
-  // rotated polygon cross-section:
-  //   apothem = R * cos(π/n) at the midpoint of each floor
-  //   but the facets are tilted — the actual minimum inscribed radius is:
-  //   r_inner = R * cos(π/n) * cos(φ/2)
-  //   where φ is the angular twist per floor.
-  //
-  // This gives inner diameter = 2 * R * cos(π/n) * cos(φ/2)
-  const compress = p.compress; // 0..1
-  const{floor_h, dx, R, n} = g;
-  const eFH = floor_h * (1 - compress*0.98);
-  const eDx = dx * (1 - compress*0.5);
-  const phi = eDx / R; // angular offset per floor
-  const apothem = R * Math.cos(Math.PI/n); // inscribed circle radius of polygon
-  const r_inner = apothem * Math.cos(phi/2);
-  const innerD = 2 * Math.max(0, r_inner);
-  const totalFloors = p.floors * p.stack;
-  const tubeH = eFH * totalFloors;
-
-  document.getElementById('s-id').textContent = innerD.toFixed(2)+' cm';
-  document.getElementById('s-id').style.color = innerD > 0 ? '#e0eeff' : '#f87171';
-  document.getElementById('s-th').textContent = tubeH.toFixed(2)+' cm';
-
-  // Material thickness in mm (for reference)
-  const matThickMm = (p.wallmm||5) * 0.0254; // mil → mm
-  document.getElementById('s-fw').textContent = matThickMm.toFixed(3)+' mm';
-
   const badge=document.getElementById('validity-badge'),warn=document.getElementById('warn-bar');
   if(!g.valid){badge.className='badge bad';badge.textContent='Invalid';warn.style.display='block';warn.textContent='⚠ dx ≥ side length — angle too shallow.';}
   else if(g.h0r>1.8){badge.className='badge warn';badge.textContent='Marginal';warn.style.display='block';warn.textContent='⚠ h₀/R high — may not fold cleanly.';}
@@ -761,43 +838,39 @@ function updateStats(p,g){
 
 function autoFitA4(){
   const p=getP(),g=computeGeometry(p),bounds=patternBounds(p,g);
-  // The pattern itself (cut border + seams) must fit inside A4.
-  // We add a small margin so dimension labels outside the border don't clip.
-  const labelMarginCm=1.2; // cm reserved on each side for dimension text
-  const usableW=A4_W-labelMarginCm*2;
-  const usableH=A4_H-labelMarginCm*2;
+  const labelMarginCm=1.2;
+  const usableW=PAPER_W-labelMarginCm*2;
+  const usableH=PAPER_H-labelMarginCm*2;
   const ms=Math.min(usableW/bounds.w, usableH/bounds.h)*100;
   const cl=Math.min(200,Math.max(10,Math.floor(ms)));
   document.getElementById('r-scale').value=cl;document.getElementById('n-scale').value=cl;draw();
 }
 function resetDefaults(){
-  const defs={dia:3,height:20,n:6,floors:10,angle:100,ext:2,seaml:1.4,seamr:0,extcols:1,stack:1,scale:100,compress:0,wallmm:5,moldbase:3,ridgeh:1.2,ridgew:0.8};
+  // Stop any running animations
+  if(foldAnim) toggleFoldAnim();
+  if(autoRotate) toggleAutoRotate();
+  const defs={dia:3,height:20,n:6,floors:10,angle:100,ext:2,seaml:1.4,seamr:0,extcols:1,scale:100,compress:0,wallmm:3};
   Object.entries(defs).forEach(([k,v])=>{const r=document.getElementById('r-'+k),n=document.getElementById('n-'+k);if(r)r.value=v;if(n)n.value=v;});
   seamAutoMode=true;const cb=document.getElementById('seam-auto-cb');if(cb)cb.checked=true;
   applyAutoSeam();draw();
 }
 
-// ─── BUILD VERTICES (shared by flat draw and exports) ───
-// Returns vertices in cm space, centered within A4
+// ─── BUILD VERTICES ───
 function buildVerts(p,g,forExport){
-  const{n,floors,ext,seaml,seamr,extcols,stack,scale,chir}=p;
+  const{n,floors,ext,seaml,seamr,extcols,scale,chir}=p;
   const{b,floor_h,dx}=g;
   const col_min=-extcols,col_max=n+extcols;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale,scaledH=bounds.h*scale;
-
-  // Pattern origin: centered in A4 (in cm)
-  const patOriginX=(A4_W-scaledW)/2;
-  const patOriginY=(A4_H-scaledH)/2;
-
+  const patOriginX=(PAPER_W-scaledW)/2;
+  const patOriginY=(PAPER_H-scaledH)/2;
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
     for(let col=col_min;col<=col_max;col++){
       let x=col*b,y=f*floor_h;
       if(f%2===1)x+=dx*chir;else x-=dx*chir;
-      // normalize to pattern's bottom-left then scale and center in A4
       const nx=(x-bounds.minX)*scale+patOriginX;
       const ny=(y-bounds.minY)*scale+patOriginY;
       row.push([nx,ny]);
@@ -818,35 +891,30 @@ function drawFlat(){
   const ctx=canvas.getContext('2d');
   ctx.fillStyle='#1a1d28';ctx.fillRect(0,0,W,H);
 
-  const{n,floors,ext,seaml,seamr,extcols,stack,showmv,chir,scale,showA4,showGrid}=p;
+  const{n,floors,ext,seaml,seamr,extcols,showmv,chir,scale,showA4,showGrid}=p;
   const{b,floor_h,dx}=g;
   const col_min=-extcols,col_max=n+extcols,total_cols=col_max-col_min+1;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const bounds=patternBounds(p,g);
   const scaledPatW=bounds.w*scale,scaledPatH=bounds.h*scale;
 
-  // Base transform: fit A4 + margin in canvas, then apply zoom/pan on top
   const margin_cm=1.5;
-  const sceneW=A4_W+margin_cm*2,sceneH=A4_H+margin_cm*2;
-  const sc0=Math.min((W-20)/sceneW,(H-20)/sceneH); // base scale (zoom=1)
+  const sceneW=PAPER_W+margin_cm*2,sceneH=PAPER_H+margin_cm*2;
+  const sc0=Math.min((W-20)/sceneW,(H-20)/sceneH);
   const sc=sc0*flatZoom;
-  // base origin (zoom=1 centered)
   const ox0=W/2-sceneW*sc0/2, oy0=H/2-sceneH*sc0/2;
-  // panned/zoomed origin
   const ox=ox0*flatZoom+flatPanX, oy=oy0*flatZoom+flatPanY;
 
   function toC(xcm,ycm){return[ox+(xcm+margin_cm)*sc, oy+(sceneH-ycm-margin_cm)*sc];}
 
-  // Grid
   if(showGrid){
     ctx.save();ctx.strokeStyle='rgba(59,130,246,0.07)';ctx.lineWidth=0.5;
-    for(let x=0;x<=A4_W;x++){const[cx,cy]=toC(x,0),[cx2,cy2]=toC(x,A4_H);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
-    for(let y=0;y<=A4_H;y++){const[cx,cy]=toC(0,y),[cx2,cy2]=toC(A4_W,y);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
+    for(let x=0;x<=PAPER_W;x++){const[cx,cy]=toC(x,0),[cx2,cy2]=toC(x,PAPER_H);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
+    for(let y=0;y<=PAPER_H;y++){const[cx,cy]=toC(0,y),[cx2,cy2]=toC(PAPER_W,y);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
     ctx.restore();
   }
 
-  // A4 frame (shading outside)
-  const[a4x,a4y]=toC(0,A4_H),[a4x2,a4y2]=toC(A4_W,0);
+  const[a4x,a4y]=toC(0,PAPER_H),[a4x2,a4y2]=toC(PAPER_W,0);
   ctx.fillStyle='rgba(0,0,0,0.25)';
   ctx.fillRect(0,0,W,a4y);ctx.fillRect(0,a4y2,W,H-a4y2);
   ctx.fillRect(0,a4y,a4x,a4y2-a4y);ctx.fillRect(a4x2,a4y,W-a4x2,a4y2-a4y);
@@ -854,21 +922,18 @@ function drawFlat(){
     ctx.save();ctx.strokeStyle='rgba(200,200,220,0.5)';ctx.lineWidth=1.2;ctx.setLineDash([6,4]);
     ctx.strokeRect(a4x,a4y,a4x2-a4x,a4y2-a4y);ctx.setLineDash([]);
     ctx.fillStyle='rgba(200,200,220,0.4)';ctx.font='10px "JetBrains Mono",monospace';
-    ctx.fillText('A4  21×29.7 cm',a4x+4,a4y+12);ctx.restore();
+    ctx.fillText(`${PAPER_SIZES[currentPaper].label}  ${PAPER_W}×${PAPER_H} cm`,a4x+4,a4y+12);ctx.restore();
   }
 
-  // Rulers — tick marks on A4 left and bottom edges
   ctx.save();ctx.fillStyle='rgba(200,210,255,0.45)';ctx.strokeStyle='rgba(200,210,255,0.35)';ctx.lineWidth=0.7;ctx.font='7px "JetBrains Mono",monospace';ctx.textAlign='center';
-  // Bottom ruler (X axis)
-  for(let x=0;x<=A4_W;x++){
+  for(let x=0;x<=PAPER_W;x++){
     const[rx,ry]=toC(x,0);
     const major=x%5===0;const tickH=major?8:4;
     ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(rx,ry+tickH);ctx.stroke();
     if(major&&x>0){ctx.fillText(x+'cm',rx,ry+18);}
   }
-  // Left ruler (Y axis)
   ctx.textAlign='right';
-  for(let y=0;y<=A4_H;y++){
+  for(let y=0;y<=PAPER_H;y++){
     const[rx,ry]=toC(0,y);
     const major=y%5===0;const tickW=major?8:4;
     ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(rx-tickW,ry);ctx.stroke();
@@ -876,8 +941,8 @@ function drawFlat(){
   }
   ctx.restore();
   const verts=[];
-  const patOriginX=(A4_W-scaledPatW)/2;
-  const patOriginY=(A4_H-scaledPatH)/2;
+  const patOriginX=(PAPER_W-scaledPatW)/2;
+  const patOriginY=(PAPER_H-scaledPatH)/2;
   for(let f=0;f<=totalFloors;f++){
     const row=[];
     for(let col=col_min;col<=col_max;col++){
@@ -903,18 +968,14 @@ function drawFlat(){
     ctx.strokeStyle=col;ctx.lineWidth=lw||1.2;ctx.setLineDash(dash||[]);ctx.stroke();ctx.setLineDash([]);
   }
 
-  // Purple cut box
   const purp='#9f6fdf';
   line(x0,topY,x0,botY,purp,1.8);line(x1,topY,x1,botY,purp,1.8);
   line(x0,topY,x1,topY,purp,1.8);line(x2,botY,x3,botY,purp,1.8);
   if(seamlS>0){line(seamLX,topY,seamLX,botY,'slateblue',1.2,[4,3]);[topY,botY,y0,y2].forEach(yy=>line(seamLX,yy,x0,yy,'slateblue',1.2,[4,3]));}
   if(seamrS>0){line(seamRX,topY,seamRX,botY,'slateblue',1.2,[4,3]);[topY,botY,y1,y3].forEach(yy=>line(x1,yy,seamRX,yy,'slateblue',1.2,[4,3]));}
 
-  // Info box in BOTTOM gap: between floor-0 line (y0) and bottom purple border (topY)
-  // y0 > topY in cm (topY = y0 - extS is lower on page)
   drawInfoBoxCanvas(ctx, toC, sc, x0, x1, y0, topY, p, g, bounds);
 
-  // Red mountain zigzags
   for(let ci=1;ci<total_cols-1;ci++){
     ctx.beginPath();
     for(let f=0;f<=totalFloors;f++){const[vx,vy]=verts[f][ci],[cx,cy]=toC(vx,vy);f===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);}
@@ -927,14 +988,12 @@ function drawFlat(){
   ctx.beginPath();lPts.forEach(([vx,vy],i)=>{const[cx,cy]=toC(vx,vy);i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);});
   ctx.strokeStyle='#e05252';ctx.lineWidth=1.1;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
 
-  // Blue valley horizontals
   for(let f=0;f<=totalFloors;f++){
     const yL=verts[f][0][1];
     const[lx,ly]=toC(seamLX,yL),[rx,ry]=toC(seamRX,yL);
     ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(rx,ry);ctx.strokeStyle='#378ADD';ctx.lineWidth=1.3;ctx.setLineDash([]);ctx.stroke();
   }
 
-  // Green diagonals
   ctx.strokeStyle='#3dba6e';ctx.lineWidth=1.0;ctx.setLineDash([5,4]);
   for(let f=0;f<totalFloors;f++){
     for(let ci=0;ci<total_cols-1;ci++){
@@ -946,37 +1005,27 @@ function drawFlat(){
   }
   ctx.setLineDash([]);
 
-  // Dimension labels
   ctx.save();ctx.fillStyle='rgba(180,220,255,0.55)';ctx.font='9px "JetBrains Mono",monospace';
   const[lx0,ly0]=toC(x0-seamlS,topY-0.3),[rx0]=toC(x1+seamrS,topY-0.3);
-  ctx.fillText(`W=${(bounds.w*scale).toFixed(1)}cm`,(lx0+rx0)/2-18,ly0-3);
+  ctx.fillText(`W=${useInches?(bounds.w*scale*IN_PER_CM).toFixed(2):(bounds.w*scale).toFixed(1)} ${unitLabel()}`,(lx0+rx0)/2-18,ly0-3);
   const[hx0,hy0]=toC(x1+seamrS+0.25,botY),[,hy1]=toC(x1+seamrS+0.25,topY);
-  ctx.fillText(`H=${(bounds.h*scale).toFixed(1)}cm`,hx0+3,(hy0+hy1)/2);ctx.restore();
+  ctx.fillText(`H=${useInches?(bounds.h*scale*IN_PER_CM).toFixed(2):(bounds.h*scale).toFixed(1)} ${unitLabel()}`,hx0+3,(hy0+hy1)/2);ctx.restore();
 
-  // ── HOVER CROSSHAIR + NEAREST CREASE HIGHLIGHT ──
   if(flatHoverPx){
     const{x:hpx,y:hpy}=flatHoverPx;
-    // Convert canvas px → cm
     const hcm_x=(hpx-ox)/sc - margin_cm;
     const hcm_y=sceneH - (hpy-oy)/sc - margin_cm;
-
-    // Draw crosshair
     ctx.save();
     ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=0.8;ctx.setLineDash([4,4]);
     ctx.beginPath();ctx.moveTo(hpx,0);ctx.lineTo(hpx,H);ctx.stroke();
     ctx.beginPath();ctx.moveTo(0,hpy);ctx.lineTo(W,hpy);ctx.stroke();
     ctx.setLineDash([]);
-
-    // Nearest crease highlight
     const nc=getNearestCrease(hpx,hpy,verts,p,g,toC);
     const creaseColors={blue:'#60c8ff',red:'#ff8080',green:'#80ffb0'};
     if(nc.type){
       ctx.strokeStyle=creaseColors[nc.type]||'#fff';
       ctx.lineWidth=2.5;ctx.globalAlpha=0.85;
-      // Draw a small highlight ring on the hit point (approx)
     }
-
-    // Coordinate tooltip
     const lines=[`x = ${hcm_x.toFixed(2)} cm`, `y = ${hcm_y.toFixed(2)} cm`];
     if(nc.type) lines.push(nc.label);
     const tfs=9,tlh=12,tPad=5,tW=130,tH=lines.length*tlh+tPad*2;
@@ -1002,8 +1051,6 @@ function drawFlat(){
 // ─── FLAT CANVAS MOUSE/WHEEL EVENTS ───
 function initFlatCanvasEvents(){
   const canvas=document.getElementById('flatCanvas');
-
-  // Zoom with wheel — zoom toward cursor, scroll out resets to default
   canvas.addEventListener('wheel',e=>{
     e.preventDefault();
     const rect=canvas.getBoundingClientRect();
@@ -1011,18 +1058,14 @@ function initFlatCanvasEvents(){
     const delta=e.deltaY<0?1.12:1/1.12;
     const newZoom=flatZoom*delta;
     if(newZoom<=1.0){
-      // reset to default
       flatZoom=1; flatPanX=0; flatPanY=0;
     } else {
-      // zoom toward mouse position
       flatPanX=(flatPanX-mx)*delta+mx;
       flatPanY=(flatPanY-my)*delta+my;
       flatZoom=Math.min(newZoom,20);
     }
     drawFlat();
   },{passive:false});
-
-  // Pan with mouse drag
   canvas.addEventListener('mousedown',e=>{
     if(e.button===0){flatDragging=true;flatLastMouse={x:e.clientX,y:e.clientY};canvas.style.cursor='grabbing';}
   });
@@ -1034,10 +1077,7 @@ function initFlatCanvasEvents(){
     flatLastMouse={x:e.clientX,y:e.clientY};
     drawFlat();
   });
-  // Double-click to reset zoom
   canvas.addEventListener('dblclick',()=>{flatZoom=1;flatPanX=0;flatPanY=0;drawFlat();});
-
-  // Hover crosshair tracking
   canvas.addEventListener('mousemove',e=>{
     const rect=canvas.getBoundingClientRect();
     flatHoverPx={x:(e.clientX-rect.left)*(canvas.width/rect.width), y:(e.clientY-rect.top)*(canvas.height/rect.height)};
@@ -1046,7 +1086,7 @@ function initFlatCanvasEvents(){
   canvas.addEventListener('mouseleave',()=>{flatHoverPx=null;drawFlat();});
 }
 
-// ─── CENTER TAB SYSTEM (Crease Pattern | Mold Preview) ───
+// ─── CENTER TAB SYSTEM ───
 let currentCenterTab='crease';
 let currentMoldTab='mountain';
 
@@ -1067,7 +1107,7 @@ function switchMoldTab(tab){
   drawMold3d();
 }
 
-// ─── RIGHT PANEL: 3D Tube + Energy sub-panels ───
+// ─── RIGHT PANEL ───
 function toggleSubPanel(which){
   const sp=document.getElementById(which==='3d'?'sp3d':'spEnergy');
   const btn=document.getElementById(which==='3d'?'btn-tog-3d':'btn-tog-energy');
@@ -1104,10 +1144,6 @@ function _fsChange(){
 function drawPanel(){draw3d();drawEnergy();}
 
 // ─── MOLD 3D PREVIEW ───
-// Renders an interactive 3D perspective view of the flat press mold.
-// Shows the base plate as a solid slab with ridge lines on top.
-// Mountain mold = red ridges, Valley mold = blue+green ridges.
-// "Both exploded" = two molds separated by a gap with paper plane between.
 let moldRotX=0.3, moldRotY=0.5, moldDragging=false, moldLastMouse={x:0,y:0}, moldCamDist=null;
 
 function initMold3d(){
@@ -1140,7 +1176,6 @@ function initMold3d(){
 function drawMold3d(){
   const canvas=document.getElementById('canvasMold');
   if(!canvas)return;
-  // Resize canvas to match its container if needed
   const wrap=document.getElementById('center-pane-mold');
   if(wrap){
     const rect=wrap.getBoundingClientRect();
@@ -1154,20 +1189,17 @@ function drawMold3d(){
   ctx.fillStyle='#13151e'; ctx.fillRect(0,0,W,H);
 
   const p=getP(), g=computeGeometry(p);
-  const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
+  const{n,floors,ext,seaml,seamr,extcols,chir,scale}=p;
   const{b,floor_h,dx}=g;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const col_min=-extcols, col_max=n+extcols, total_cols=col_max-col_min+1;
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale, scaledH=bounds.h*scale;
-  const patOriginX=(A4_W-scaledW)/2, patOriginY=(A4_H-scaledH)/2;
+  const patOriginX=(PAPER_W-scaledW)/2, patOriginY=(PAPER_H-scaledH)/2;
   const baseT=(p.moldbase||3)/10;
   const ridgeH=(p.ridgeh||1.2)/10;
-  const wallT=(p.wallmm||5)*0.00254; // mil → cm
-  const ridgeH2=ridgeH; // alias for clarity in preview
   const margin=0.2;
 
-  // Rebuild 2D verts
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -1185,15 +1217,11 @@ function drawMold3d(){
   const topY=y0-extS, botY=y3+extS;
   const seamLX=x0-seamlS, seamRX=x1+seamrS;
 
-  // Plate corners (3D): X = pattern X, Z = pattern Y (flat), Y = up
   const pw=seamRX-seamLX+margin*2, ph=botY-topY+margin*2;
   const px0=seamLX-margin, pz0=topY-margin;
-
-  // Center the model at origin for rotation
   const cx_=px0+pw/2, cz_=pz0+ph/2;
   const moldGap=currentMoldTab==='both'?baseT*2+0.3:0;
 
-  // Rotation helpers (same as draw3d)
   const cxr=Math.cos(moldRotX),sxr=Math.sin(moldRotX);
   const cyr=Math.cos(moldRotY),syr=Math.sin(moldRotY);
   function rotate([x,y,z]){
@@ -1213,7 +1241,6 @@ function drawMold3d(){
     return[cxc+rx*sc, cyc-ry*sc, zd];
   }
 
-  // Collect draw calls: faces (filled quads) and lines
   const drawCalls=[];
 
   function addFace(pts3d, color, alpha){
@@ -1229,10 +1256,33 @@ function drawMold3d(){
     drawCalls.push({type:'line',pa,pb,color,lw,dash,z});
   }
 
-  // Draw a mold (base plate + ridges) at vertical offset yOff
-  // ridgeSegs: array of [[ax,ay],[bx,by]] in pattern 2D
-  // color scheme: plateColor, ridgeColor
-  // Collect ridge segments for each type
+  function drawMold(yOff, ridgeSegs, plateCol, ridgeCol, label){
+    const yBot=yOff-baseT, yTop=yOff;
+    const bx0=seamLX-margin, bx1=seamRX+margin;
+    const bz0=topY-margin, bz1=botY+margin;
+    const corners={
+      tl0:[bx0,yBot,bz0],tr0:[bx1,yBot,bz0],tl1:[bx0,yBot,bz1],tr1:[bx1,yBot,bz1],
+      bl0:[bx0,yTop,bz0],br0:[bx1,yTop,bz0],bl1:[bx0,yTop,bz1],br1:[bx1,yTop,bz1],
+    };
+    addFace([corners.bl0,corners.br0,corners.br1,corners.bl1],plateCol,0.82);
+    addFace([corners.tl0,corners.tl1,corners.tr1,corners.tr0],plateCol,0.45);
+    addFace([corners.tl0,corners.bl0,corners.bl1,corners.tl1],plateCol,0.55);
+    addFace([corners.tr0,corners.tr1,corners.br1,corners.br0],plateCol,0.55);
+    addFace([corners.tl0,corners.tr0,corners.br0,corners.bl0],plateCol,0.60);
+    addFace([corners.tl1,corners.bl1,corners.br1,corners.tr1],plateCol,0.60);
+    [[corners.bl0,corners.br0],[corners.br0,corners.br1],[corners.br1,corners.bl1],[corners.bl1,corners.bl0]].forEach(([a,b])=>addLine(a,b,'rgba(255,255,255,0.15)',0.8));
+    for(const[[ax,ay],[bx_,by_]] of ridgeSegs){
+      const a3=[ax,yTop,ay], b3=[bx_,yTop,by_];
+      const ap=[ax,yTop+ridgeH,ay], bp=[bx_,yTop+ridgeH,by_];
+      addFace([a3,b3,bp,ap],ridgeCol,0.85);
+      addLine(ap,bp,ridgeCol,2);
+      addLine(a3,ap,ridgeCol,1.2);
+      addLine(b3,bp,ridgeCol,1.2);
+    }
+    const labelPt=project([cx_,yTop+ridgeH+0.2,cz_]);
+    if(labelPt) drawCalls.push({type:'label',pt:labelPt,text:label,z:labelPt[2]});
+  }
+
   const mountainSegs=[];
   for(let ci=1;ci<total_cols-1;ci++)
     for(let f=0;f<totalFloors;f++)
@@ -1248,72 +1298,24 @@ function drawMold3d(){
     }
 
   const plateBase='#2a3050', mtnRidge='#e05252', valRidge='#378ADD';
-  // ridgeSegs: array of [[ax,ay],[bx,by]] in pattern 2D — drawn as RIDGES (^) above plate
-  // grooveSegs: drawn as GROOVES (V) into the plate face (shown as inset lines)
-
-  function drawPlate(yOff, ridgeSegsArr, grooveSegsArr, plateCol, ridgeCol, grooveCol, label){
-    const yBot=yOff-baseT, yTop=yOff;
-    const bx0=seamLX-margin, bx1=seamRX+margin;
-    const bz0=topY-margin, bz1=botY+margin;
-
-    // Base plate faces
-    const corners={
-      tl0:[bx0,yBot,bz0],tr0:[bx1,yBot,bz0],tl1:[bx0,yBot,bz1],tr1:[bx1,yBot,bz1],
-      bl0:[bx0,yTop,bz0],br0:[bx1,yTop,bz0],bl1:[bx0,yTop,bz1],br1:[bx1,yTop,bz1],
-    };
-    addFace([corners.bl0,corners.br0,corners.br1,corners.bl1],plateCol,0.82); // working face (top)
-    addFace([corners.tl0,corners.tl1,corners.tr1,corners.tr0],plateCol,0.45); // back
-    addFace([corners.tl0,corners.bl0,corners.bl1,corners.tl1],plateCol,0.55);
-    addFace([corners.tr0,corners.tr1,corners.br1,corners.br0],plateCol,0.55);
-    addFace([corners.tl0,corners.tr0,corners.br0,corners.bl0],plateCol,0.60);
-    addFace([corners.tl1,corners.bl1,corners.br1,corners.tr1],plateCol,0.60);
-    [[corners.bl0,corners.br0],[corners.br0,corners.br1],[corners.br1,corners.bl1],[corners.bl1,corners.bl0]].forEach(([a,b])=>addLine(a,b,'rgba(255,255,255,0.15)',0.8));
-
-    // RIDGES (^) — protrude above working face
-    for(const[[ax,ay],[bx_,by_]] of ridgeSegsArr){
-      const a3=[ax,yTop,ay], b3=[bx_,yTop,by_];
-      const ap=[ax,yTop+ridgeH,ay], bp=[bx_,yTop+ridgeH,by_];
-      addFace([a3,b3,bp,ap],ridgeCol,0.9);
-      addLine(ap,bp,ridgeCol,2.5);
-      addLine(a3,ap,ridgeCol,1);
-      addLine(b3,bp,ridgeCol,1);
-    }
-
-    // GROOVES (V) — shown as inset lines on the face
-    for(const[[ax,ay],[bx_,by_]] of grooveSegsArr){
-      const ag=[ax,yTop-ridgeH*0.5,ay], bg=[bx_,yTop-ridgeH*0.5,by_];
-      addLine([ax,yTop,ay],[bx_,yTop,by_],grooveCol,1.5,[3,2]);
-      addLine(ag,bg,grooveCol,1);
-    }
-
-    const labelPt=project([cx_,yTop+ridgeH+0.15,cz_]);
-    if(labelPt) drawCalls.push({type:'label',pt:labelPt,text:label,z:labelPt[2]});
-  }
 
   if(currentMoldTab==='mountain'){
-    // Plate 1: mountain=ridge^, valley=groove V
-    drawPlate(0, mountainSegs, valleySegs, plateBase, mtnRidge, valRidge, 'Plate 1 — top');
+    drawMold(0, mountainSegs, plateBase, mtnRidge, 'Mountain mold');
   } else if(currentMoldTab==='valley'){
-    // Plate 2: mountain=groove V, valley=ridge^
-    drawPlate(0, valleySegs, mountainSegs, plateBase, valRidge, mtnRidge, 'Plate 2 — bottom');
+    drawMold(0, valleySegs, plateBase, valRidge, 'Valley mold');
   } else {
-    // Assembled: plate 2 below, paper in middle, plate 1 above (flipped)
-    // Plate 1 on top (flipped — ridges point DOWN toward paper)
-    drawPlate(moldGap+baseT, mountainSegs, valleySegs, '#253040', mtnRidge, valRidge, 'Plate 1 (top, flipped)');
-    // Paper plane in middle
+    drawMold(moldGap+baseT, mountainSegs, '#253040', mtnRidge, 'Mountain mold (top)');
     const py=moldGap/2;
-    addFace([[seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin]],'#ffffff',0.25);
-    addLine([seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],'rgba(255,255,255,0.4)',0.8);
-    addLine([seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],'rgba(255,255,255,0.4)',0.8);
-    addLine([seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin],'rgba(255,255,255,0.4)',0.8);
-    addLine([seamLX-margin,py,botY+margin],[seamLX-margin,py,topY-margin],'rgba(255,255,255,0.4)',0.8);
+    addFace([[seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin]],'#ffffff',0.22);
+    addLine([seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],'rgba(255,255,255,0.3)',0.8);
+    addLine([seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],'rgba(255,255,255,0.3)',0.8);
+    addLine([seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin],'rgba(255,255,255,0.3)',0.8);
+    addLine([seamLX-margin,py,botY+margin],[seamLX-margin,py,topY-margin],'rgba(255,255,255,0.3)',0.8);
     const ppPt=project([cx_,py,cz_]);
     if(ppPt) drawCalls.push({type:'label',pt:ppPt,text:'paper',z:ppPt[2]});
-    // Plate 2 on bottom (ridges point UP toward paper)
-    drawPlate(0, valleySegs, mountainSegs, '#253040', valRidge, mtnRidge, 'Plate 2 (bottom)');
+    drawMold(0, valleySegs, '#253040', valRidge, 'Valley mold (bottom)');
   }
 
-  // Sort back-to-front and draw
   drawCalls.sort((a,b)=>b.z-a.z);
   for(const dc of drawCalls){
     if(dc.type==='face'){
@@ -1321,7 +1323,6 @@ function drawMold3d(){
       ctx.moveTo(dc.pp[0][0],dc.pp[0][1]);
       for(let i=1;i<dc.pp.length;i++) ctx.lineTo(dc.pp[i][0],dc.pp[i][1]);
       ctx.closePath();
-      // Parse color and apply alpha
       ctx.globalAlpha=dc.alpha;
       ctx.fillStyle=dc.color; ctx.fill();
       ctx.globalAlpha=1;
@@ -1338,7 +1339,6 @@ function drawMold3d(){
     }
   }
 
-  // HUD
   ctx.globalAlpha=1;
   ctx.fillStyle='rgba(139,144,160,0.65)';
   ctx.font='9px "JetBrains Mono",monospace';
@@ -1348,8 +1348,7 @@ function drawMold3d(){
   ctx.fillText('drag=rotate  scroll=zoom  dbl=reset',W-8,H-10);
 }
 
-// ─── 3D PURE CANVAS RENDERER (no external deps) ───
-// Simple perspective projection with painter's-algorithm depth sort.
+// ─── 3D CANVAS RENDERER ───
 function init3d(){
   const canvas=document.getElementById('canvas3d');
   if(!canvas)return;
@@ -1358,8 +1357,6 @@ function init3d(){
   const W=Math.max(100,Math.round(rect.width)||wrap.offsetWidth||340);
   const H=Math.max(100,Math.round(rect.height)||wrap.offsetHeight||300);
   canvas.width=W; canvas.height=H;
-
-  // Pointer events for rotate + zoom
   canvas.onpointerdown=e=>{isDragging=true;lastMouse={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);};
   canvas.onpointerup=canvas.onpointercancel=()=>isDragging=false;
   canvas.onpointermove=e=>{
@@ -1388,12 +1385,11 @@ function draw3d(){
   ctx.fillStyle='#13151e'; ctx.fillRect(0,0,W,H);
 
   const p=getP(), g=computeGeometry(p);
-  const{n,floors,stack,chir,compress}=p, {floor_h,dx,R}=g;
-  const totalFloors=floors*stack;
+  const{n,floors,chir,compress}=p, {floor_h,dx,R}=g;
+  const totalFloors=floors;
   const eFH=floor_h*(1-compress*0.98);
   const eDx=dx*(1-compress*0.5);
 
-  // Build 3D vertex rings
   const rings=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -1406,24 +1402,18 @@ function draw3d(){
     rings.push(row);
   }
 
-  // Rotation matrices Rx * Ry
   const cx=Math.cos(rotX),sx=Math.sin(rotX);
   const cy=Math.cos(rotY),sy=Math.sin(rotY);
   function rotate([x,y,z]){
-    // Ry
     const x1=x*cy+z*sy, z1=-x*sy+z*cy;
-    // Rx
     const y2=y*cx-z1*sx, z2=y*sx+z1*cx;
     return [x1,y2,z2];
   }
 
-  // Auto-fit camera distance
   const modelH=totalFloors*eFH;
   const modelSpan=Math.max(R*2,modelH)*1.8;
   const dist=cam3dDist||modelSpan+2;
-
-  // Perspective project to canvas
-  const fov=0.8; // radians half-fov approximation
+  const fov=0.8;
   const cx2=W/2, cy2=H/2;
   const scale=Math.min(W,H)/(2*fov*dist);
 
@@ -1432,10 +1422,9 @@ function draw3d(){
     const zd=z+dist;
     if(zd<=0.01)return null;
     const sc=scale*(dist/zd);
-    return[cx2+x*sc, cy2-y*sc, zd]; // returns [px, py, depth]
+    return[cx2+x*sc, cy2-y*sc, zd];
   }
 
-  // Collect all segments with their average depth for painter's sort
   const segs=[];
 
   for(let f=0;f<totalFloors;f++){
@@ -1443,23 +1432,15 @@ function draw3d(){
       const k2=(k+1)%n;
       const v1=rings[f][k], v2=rings[f][k2];
       const v3=rings[f+1][k], v4=rings[f+1][k2];
-
-      // Horizontal ring edges (blue valley)
       segs.push({type:'blue', pts:[v1,v2]});
-      // Vertical mountain creases (red)
       segs.push({type:'red', pts:[v1,v3]});
-      // Green diagonal
       const gv=(f*chir)%2===0?[v2,v3]:[v1,v4];
       segs.push({type:'green', pts:gv});
-
-      // Semi-transparent face for depth cue
       segs.push({type:'face', pts:[v1,v2,v4,v3]});
     }
   }
-  // Top ring edge
   for(let k=0;k<n;k++) segs.push({type:'blue', pts:[rings[totalFloors][k],rings[totalFloors][(k+1)%n]]});
 
-  // Compute depth (average z after rotation) and project
   const projected=segs.map(s=>{
     const pp=s.pts.map(project);
     if(pp.some(x=>!x))return null;
@@ -1467,15 +1448,12 @@ function draw3d(){
     return{...s,pp,avgZ};
   }).filter(Boolean);
 
-  // Sort back-to-front
   projected.sort((a,b)=>b.avgZ-a.avgZ);
 
-  // Draw
   for(const seg of projected){
     const{type,pp}=seg;
     ctx.beginPath();
     if(type==='face'){
-      // Filled translucent face
       ctx.moveTo(pp[0][0],pp[0][1]);
       for(let i=1;i<pp.length;i++) ctx.lineTo(pp[i][0],pp[i][1]);
       ctx.closePath();
@@ -1492,7 +1470,6 @@ function draw3d(){
     ctx.setLineDash([]);
   }
 
-  // Overlay: compress value + hint
   ctx.fillStyle='rgba(139,144,160,0.7)';
   ctx.font='10px "JetBrains Mono",monospace';
   ctx.textAlign='left';
@@ -1501,13 +1478,7 @@ function draw3d(){
   ctx.fillText('drag=rotate  scroll=zoom  dbl=reset',W-8,H-10);
 }
 
-// ─── ENERGY GRAPH (corrected) ───
-// Physical model: Kresling tube modelled as a single-DOF mechanism.
-// The only DOF is the rotation angle φ of each polygon ring relative to its neighbor.
-// At full extension: φ = φ_0 (the designed angle). At full collapse: φ = π/n (flat).
-// Energy stored in elastic creases: E(φ) = k*(φ - φ_rest)²  per crease.
-// Mountain creases and valley (green diagonal) creases have different rest angles.
-// The height h is related to φ by the exact kinematic constraint of the Kresling geometry.
+// ─── ENERGY GRAPH ───
 function drawEnergy(){
   const canvas=document.getElementById('canvasEnergy');
   const wrap=canvas.parentElement;
@@ -1519,77 +1490,44 @@ function drawEnergy(){
   ctx.fillStyle='#1a1d28';ctx.fillRect(0,0,W,H);
 
   const p=getP(),g=computeGeometry(p);
-  const{n,floors,stack,angle}=p;
+  const{n,floors,angle}=p;
   const{floor_h,R,b,dx}=g;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
 
-  // The designed (rest) rotation angle per floor from the crease geometry:
-  // Each polygon ring is rotated by φ_0 = atan2(dx, R*sin(π/n)) from the previous
-  // More precisely, from the flat-pattern geometry, the side chord = b = 2R*sin(π/n)
-  // The angular offset per floor: φ_0 = dx / R  (small-angle linearization used in 3D rendering)
-  // For the energy model we use the exact dihedral angles
-
-  // Parameterize by height h (floor height), range [h_min, h_max]
-  // h_min: nearly flat (collapsed), a small fraction of b
-  // h_max: maximum possible = when green crease is taut (length constraint)
-  // green crease length L_g = sqrt((b+2*dx0)^2 + floor_h^2) is FIXED (paper is inextensible)
-  // As h changes, dx must adjust to keep green crease length = L_g_0
-  // → h² + (b + 2*dx(h))² = L_g_0²
-  // → dx(h) = (sqrt(L_g_0² - h²) - b) / 2
-
-  const L_g0 = g.green_len; // fixed green crease length
-  const L_r0 = g.red_len;   // fixed red crease length (also inextensible)
-  // red crease: sqrt(dx² + h²) = L_r0 → dx_red(h) = sqrt(L_r0² - h²)
-  // Both constraints must hold simultaneously: use red crease to define dx(h)
-  // dx(h) = sqrt(L_r0² - h²)  — from inextensibility of red crease
-  // then check green crease is consistent
-
-  const h_max = L_r0 * 0.999; // physical max height
-  const h_min = L_r0 * 0.02;  // near-collapsed (not exactly 0 to avoid degenerate geometry)
+  const L_g0 = g.green_len;
+  const L_r0 = g.red_len;
+  const h_max = L_r0 * 0.999;
+  const h_min = L_r0 * 0.02;
 
   const STEPS = 400;
   const energyPoints=[], heightPoints=[];
 
-  // At the designed state (h = floor_h), the crease angles are the "rest" angles
-  // Fold angle for mountain crease: angle between two triangular faces sharing the red crease
-  // We approximate the fold angle as ψ_m(h) = π - 2*atan(dx(h)/h) ... simplified planar approximation
-  // More accurately, for the Kresling triangulated surface:
-  // The dihedral angle across the mountain (vertical) crease depends on the polygon geometry
-  // Use vector cross product of face normals for each triangle pair
-
   function getDihedral(h){
     if(h<=0||h>=L_r0)return null;
     const dxH=Math.sqrt(Math.max(0,L_r0*L_r0-h*h));
-    // Check if green crease constraint allows this height
-    const L_g_check=Math.sqrt((b+2*dxH)*(b+2*dxH)+h*h);
     const phi=dxH/R;
     const alpha=Math.PI/n;
-
-    // Plain vector math helpers (no Three.js)
     const vsub=([ax,ay,az],[bx,by,bz])=>[ax-bx,ay-by,az-bz];
     const vcross=([ax,ay,az],[bx,by,bz])=>[ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx];
     const vdot=([ax,ay,az],[bx,by,bz])=>ax*bx+ay*by+az*bz;
     const vnorm=v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};
-
     const A=[R, 0, 0];
     const B=[R*Math.cos(2*alpha), R*Math.sin(2*alpha), 0];
     const C=[R*Math.cos(phi)*Math.cos(alpha)-R*Math.sin(phi)*Math.sin(alpha),
              R*Math.cos(phi)*Math.sin(alpha)+R*Math.sin(phi)*Math.cos(alpha), h];
     const D=[R*Math.cos(phi+2*alpha), R*Math.sin(phi+2*alpha), h];
-
     const n1=vnorm(vcross(vsub(B,A),vsub(C,A)));
     const n2=vnorm(vcross(vsub(C,A),vsub(D,A)));
     const psi_m=Math.acos(Math.max(-1,Math.min(1,vdot(n1,n2))));
     const n3=vnorm(vcross(vsub(C,B),vsub(A,B)));
     const psi_v=Math.acos(Math.max(-1,Math.min(1,-vdot(n1,n3))));
-    return{psi_m,psi_v,dxH,L_g:L_g_check};
+    return{psi_m,psi_v,dxH};
   }
 
   const restAngles=getDihedral(floor_h);
   if(!restAngles){ctx.fillStyle='#f87171';ctx.font='12px monospace';ctx.fillText('Cannot compute energy: invalid geometry',20,H/2);return;}
   const{psi_m:psi_m0,psi_v:psi_v0}=restAngles;
 
-  // Spring constants (mountain folds stiffer for typical paper crease)
   const k_m=2.0,k_v=1.0;
   let minE=Infinity,maxE=-Infinity;
 
@@ -1605,7 +1543,6 @@ function drawEnergy(){
     if(E<minE)minE=E;if(E>maxE)maxE=E;
   }
 
-  // Find local minima with noise tolerance (window of 5 pts)
   const localMinima=[];
   const WINDOW=8;
   for(let i=WINDOW;i<energyPoints.length-WINDOW;i++){
@@ -1613,70 +1550,56 @@ function drawEnergy(){
     for(let j=i-WINDOW;j<=i+WINDOW;j++){if(j!==i&&energyPoints[j]<=energyPoints[i]){isMin=false;break;}}
     if(isMin)localMinima.push({idx:i,h:heightPoints[i],E:energyPoints[i]});
   }
-  // Merge minima that are too close together (within 5% of range)
   const mergedMinima=[];
   let lastH=-Infinity;
   for(const m of localMinima){
     if(m.h-lastH>(h_max-h_min)*totalFloors*0.05){mergedMinima.push(m);lastH=m.h;}
   }
 
-  // Check endpoints
   const endpointMinima=[];
   if(energyPoints[0]<energyPoints[WINDOW])endpointMinima.push({idx:0,h:heightPoints[0],E:energyPoints[0],label:'Collapsed'});
   if(energyPoints[STEPS]<energyPoints[STEPS-WINDOW])endpointMinima.push({idx:STEPS,h:heightPoints[STEPS],E:energyPoints[STEPS],label:'Extended'});
 
   const allMinima=[...endpointMinima,...mergedMinima];
-  // True bistability: need exactly 2 distinct energy wells separated by a local maximum
   const trulBistable=mergedMinima.length>=1&&(endpointMinima.length>=1||mergedMinima.length>=2);
-  // Cross-check with geometric criterion
   const geomBistable=g.bistable;
   const isBistable=trulBistable&&geomBistable;
 
-  // Layout
   const PAD={l:52,r:16,t:36,b:48};
   const gW=W-PAD.l-PAD.r,gH=H-PAD.t-PAD.b;
   const totalH_max=heightPoints[STEPS],totalH_min=heightPoints[0];
   function toX(h){return PAD.l+(h-totalH_min)/(totalH_max-totalH_min+1e-9)*gW;}
   function toY(E){return PAD.t+gH-((E-minE)/(maxE-minE+1e-9))*gH;}
 
-  // Grid
   ctx.strokeStyle='rgba(59,130,246,0.1)';ctx.lineWidth=0.5;
   for(let i=0;i<=4;i++){const y=PAD.t+i*(gH/4);ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+gW,y);ctx.stroke();}
   for(let i=0;i<=5;i++){const x=PAD.l+i*(gW/5);ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+gH);ctx.stroke();}
 
-  // Axes
   ctx.strokeStyle='rgba(180,200,255,0.45)';ctx.lineWidth=1.2;
   ctx.beginPath();ctx.moveTo(PAD.l,PAD.t);ctx.lineTo(PAD.l,PAD.t+gH);ctx.lineTo(PAD.l+gW,PAD.t+gH);ctx.stroke();
 
-  // Axis labels
   ctx.fillStyle='rgba(139,144,160,0.9)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='center';
   ctx.fillText('Total height (cm)',PAD.l+gW/2,H-6);
   ctx.save();ctx.translate(11,PAD.t+gH/2);ctx.rotate(-Math.PI/2);ctx.fillText('Energy (a.u.)',0,0);ctx.restore();
-  // Tick x
   ctx.textAlign='center';ctx.font='9px "JetBrains Mono",monospace';
   for(let i=0;i<=5;i++){const h=totalH_min+(i/5)*(totalH_max-totalH_min);ctx.fillStyle='rgba(139,144,160,0.7)';ctx.fillText(h.toFixed(1),toX(h),PAD.t+gH+13);}
-  // Tick y
   ctx.textAlign='right';
   for(let i=0;i<=4;i++){const E=minE+(1-i/4)*(maxE-minE);const y=PAD.t+(i/4)*gH;ctx.fillStyle='rgba(139,144,160,0.6)';ctx.fillText(E.toFixed(3),PAD.l-4,y+3);}
 
-  // Fill under curve
   ctx.beginPath();ctx.moveTo(toX(heightPoints[0]),PAD.t+gH);
   for(let i=0;i<=STEPS;i++)ctx.lineTo(toX(heightPoints[i]),toY(energyPoints[i]));
   ctx.lineTo(toX(heightPoints[STEPS]),PAD.t+gH);ctx.closePath();
   ctx.fillStyle='rgba(59,130,246,0.07)';ctx.fill();
 
-  // Curve
   ctx.beginPath();
   for(let i=0;i<=STEPS;i++){const x=toX(heightPoints[i]),y=toY(energyPoints[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
   ctx.strokeStyle='#378ADD';ctx.lineWidth=2;ctx.setLineDash([]);ctx.stroke();
 
-  // Designed state marker (vertical line)
   const designedH=floor_h*totalFloors;
   const dX=toX(designedH);
   ctx.beginPath();ctx.moveTo(dX,PAD.t);ctx.lineTo(dX,PAD.t+gH);
   ctx.strokeStyle='rgba(160,160,200,0.3)';ctx.lineWidth=1;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
 
-  // Local minima markers
   const eqColors=['#4ade80','#fbbf24','#a78bfa','#f87171'];
   allMinima.forEach((eq,idx)=>{
     const x=toX(eq.h),y=toY(eq.E);
@@ -1690,7 +1613,6 @@ function drawEnergy(){
     ctx.fillText(lbl,x,y-8);ctx.fillText(eq.h.toFixed(1)+'cm',x,y-18);
   });
 
-  // Current state (compression slider)
   const curH=(1-p.compress)*(designedH-h_min*totalFloors)+h_min*totalFloors;
   const curIdx=Math.round((curH-totalH_min)/(totalH_max-totalH_min)*STEPS);
   const curE=energyPoints[Math.max(0,Math.min(STEPS,curIdx))];
@@ -1701,9 +1623,8 @@ function drawEnergy(){
   ctx.fillText(`h=${curH.toFixed(2)}`,cx2+(cx2+80>W-PAD.r?-8:8),cy2-3);
   ctx.fillText(`E=${curE.toFixed(4)}`,cx2+(cx2+80>W-PAD.r?-8:8),cy2+9);
 
-  // Title + bistability label
   ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
-  ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm`,PAD.l,PAD.t-18);
+  ctx.fillText(`n=${n}  floors=${floors}  dia=${p.dia}cm`,PAD.l,PAD.t-18);
   if(isBistable){
     ctx.fillStyle='#4ade80';ctx.font='9px "JetBrains Mono",monospace';ctx.textAlign='right';
     ctx.fillText('BISTABLE — two energy wells',PAD.l+gW,PAD.t-18);
@@ -1712,36 +1633,25 @@ function drawEnergy(){
     ctx.fillText('monostable',PAD.l+gW,PAD.t-18);
   }
 
-  // ─── HOVER CROSSHAIR + TOOLTIP ───
   if(energyHoverX !== null){
     const hx = energyHoverX;
-    // Only show if within plot area
     if(hx >= PAD.l && hx <= PAD.l+gW){
-      // Interpolate height value from x pixel
       const hoverH = totalH_min + ((hx-PAD.l)/gW)*(totalH_max-totalH_min);
       const hoverIdx = Math.round((hoverH-totalH_min)/(totalH_max-totalH_min+1e-9)*STEPS);
       const clampIdx = Math.max(0,Math.min(STEPS,hoverIdx));
       const hoverE = energyPoints[clampIdx];
       const hoverHActual = heightPoints[clampIdx];
       const hy = toY(hoverE);
-
-      // Vertical crosshair line
       ctx.save();
       ctx.beginPath();ctx.moveTo(hx,PAD.t);ctx.lineTo(hx,PAD.t+gH);
       ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=1;ctx.setLineDash([4,3]);ctx.stroke();
       ctx.setLineDash([]);
-
-      // Horizontal crosshair line
       ctx.beginPath();ctx.moveTo(PAD.l,hy);ctx.lineTo(PAD.l+gW,hy);
       ctx.strokeStyle='rgba(255,255,255,0.2)';ctx.lineWidth=0.8;ctx.setLineDash([4,3]);ctx.stroke();
       ctx.setLineDash([]);
-
-      // Dot on curve
       ctx.beginPath();ctx.arc(hx,hy,4,0,Math.PI*2);
       ctx.fillStyle='#facc15';ctx.fill();
       ctx.strokeStyle='#1a1d28';ctx.lineWidth=1.5;ctx.stroke();
-
-      // Tooltip box
       const lines=[
         `h = ${hoverHActual.toFixed(3)} cm`,
         `E = ${hoverE.toFixed(5)}`,
@@ -1750,18 +1660,15 @@ function drawEnergy(){
       const tfs=9, tlh=tfs+3, tPad=6;
       const tW=120, tH=lines.length*tlh+tPad*2;
       let tx=hx+10, ty=hy-tH/2;
-      // Keep inside plot
       if(tx+tW>PAD.l+gW) tx=hx-tW-10;
       if(ty<PAD.t) ty=PAD.t;
       if(ty+tH>PAD.t+gH) ty=PAD.t+gH-tH;
-
       ctx.fillStyle='rgba(20,22,35,0.92)';
       ctx.strokeStyle='rgba(250,204,21,0.6)';
       ctx.lineWidth=1;
       ctx.beginPath();
       ctx.roundRect?ctx.roundRect(tx,ty,tW,tH,4):ctx.rect(tx,ty,tW,tH);
       ctx.fill();ctx.stroke();
-
       ctx.fillStyle='#facc15';
       ctx.font=`${tfs}px "JetBrains Mono",monospace`;
       ctx.textAlign='left';ctx.textBaseline='top';
@@ -1779,42 +1686,39 @@ function draw(){
 }
 
 // ─── ENERGY HOVER STATE ───
-let energyHoverX = null; // null = no hover, otherwise canvas pixel x
+let energyHoverX = null;
 
 // ─── INFO BOX HELPERS ───
-// Left column / right column labels matching the reference image style
 function infoBoxLines(p, g, bounds){
-  const patW=(bounds.w*p.scale).toFixed(2);
-  const patH=(bounds.h*p.scale).toFixed(2);
-  const totalLen=(p.dia*Math.PI).toFixed(3);
+  const ul=unitLabel();
+  const cv=useInches?x=>(x*IN_PER_CM).toFixed(3):x=>x.toFixed(3);
+  const patW=cv(bounds.w*p.scale);
+  const patH=cv(bounds.h*p.scale);
+  const totalLen=cv(p.dia*Math.PI);
   const left=[
-    `Floor height: ${g.floor_h.toFixed(2)} cm`,
-    `One side: ${g.b.toFixed(3)} cm`,
-    `Red line: ${g.red_len.toFixed(2)} cm`,
+    `Floor height: ${cv(g.floor_h)} ${ul}`,
+    `One side: ${cv(g.b)} ${ul}`,
+    `Red line: ${cv(g.red_len)} ${ul}`,
     `Blue-Red Angle: ${p.angle.toFixed(1)}\u00b0`,
     `Green-Red angle: ${g.gr_angle.toFixed(2)}\u00b0`,
     `h0/R: ${g.h0r.toFixed(4)}`,
     `Bistable: ${g.bistable?'yes':'no'}`,
   ];
   const right=[
-    `Diameter: ${p.dia.toFixed(2)} cm`,
-    `Height: ${p.height.toFixed(2)} cm`,
-    `Total length ${totalLen} cm`,
+    `Diameter: ${cv(p.dia)} ${ul}`,
+    `Height: ${cv(p.height)} ${ul}`,
+    `Total length: ${totalLen} ${ul}`,
     `Floors: ${p.floors}`,
     `Sides: ${p.n}`,
-    `Stack: \u00d7${p.stack}`,
+
     `Scale: ${(p.scale*100).toFixed(0)}%`,
   ];
   return{left,right};
 }
 
-// Draw info box in bottom gap — no white box, text fills the gap space
-// Screen: transparent bg, light-coloured text
-// Print (PNG/PDF): transparent bg, dark text (for print legibility)
 function drawInfoBoxCanvas(ctx, toC, sc, x0, x1, gapHiCm, gapLoCm, p, g, bounds, forPrint){
   const{left,right}=infoBoxLines(p,g,bounds);
   const lineCount=Math.max(left.length,right.length);
-
   const[px0, cy_hi]=toC(x0, gapHiCm);
   const[px1, cy_lo]=toC(x1, gapLoCm);
   const rectTop=Math.min(cy_hi, cy_lo);
@@ -1822,22 +1726,16 @@ function drawInfoBoxCanvas(ctx, toC, sc, x0, x1, gapHiCm, gapLoCm, p, g, bounds,
   const gapH=rectBot-rectTop;
   const gapW=px1-px0;
   if(gapH<4||gapW<20)return;
-
-  // Fit font so all lines fill the gap snugly
   const padPx=Math.max(2, Math.round(gapH*0.06));
   const availH=gapH-padPx*2;
-  // Start big, shrink until all lines fit
   let fs=Math.floor(availH/lineCount)-2;
   fs=Math.max(5, Math.min(11, fs));
   const lh=Math.floor(availH/lineCount);
-  // Total text block centered vertically
   const totalTextH=lineCount*lh;
   const startY=rectTop+padPx+Math.floor((availH-totalTextH)/2)+fs;
-
   ctx.save();
   ctx.font=`${fs}px "Courier New",Courier,monospace`;
   ctx.textBaseline='alphabetic';
-  // Color: screen = soft blue-white, print = near-black
   ctx.fillStyle=forPrint?'#111111':'rgba(200,220,255,0.85)';
   ctx.textAlign='left';
   left.forEach((t,i)=>ctx.fillText(t, px0+padPx+2, startY+i*lh));
@@ -1850,7 +1748,6 @@ function drawInfoBoxCanvas(ctx, toC, sc, x0, x1, gapHiCm, gapLoCm, p, g, bounds,
 function infoBoxSVGText(p, g, bounds, CM, olX, orX, topYsvg, botYsvg, lastCreaseYsvg){
   const{left,right}=infoBoxLines(p,g,bounds);
   const lineCount=Math.max(left.length,right.length);
-  // Bottom gap: lastCreaseYsvg (top edge) → botYsvg (bottom edge), SVG y increases downward
   const gapTop=lastCreaseYsvg;
   const gapBot=botYsvg;
   const gapH=gapBot-gapTop;
@@ -1863,9 +1760,7 @@ function infoBoxSVGText(p, g, bounds, CM, olX, orX, topYsvg, botYsvg, lastCrease
   const lh=Math.floor(availH/lineCount);
   const totalH=lineCount*lh;
   const startY=gapTop+padPx+Math.floor((availH-totalH)/2)+fs;
-
   let out='';
-  // No background rect — transparent, dark text for print legibility
   out+=`<g font-family="'Courier New',Courier,monospace" font-size="${fs}" fill="#111111">\n`;
   left.forEach((t,i)=>{
     out+=`<text x="${(olX+padPx+2).toFixed(1)}" y="${(startY+i*lh).toFixed(1)}">${escSVG(t)}</text>\n`;
@@ -1878,30 +1773,22 @@ function infoBoxSVGText(p, g, bounds, CM, olX, orX, topYsvg, botYsvg, lastCrease
 }
 function escSVG(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-// ─── SHARED RENDER TO CANVAS (used by both screen drawFlat and exports) ───
-// sc = pixels-per-cm, ox/oy = canvas origin offset
 function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
-  const{n,floors,ext,seaml,seamr,extcols,stack,showmv,chir,scale,showA4,showGrid}=p;
+  const{n,floors,ext,seaml,seamr,extcols,showmv,chir,scale,showA4,showGrid}=p;
   const{b,floor_h,dx}=g;
   const col_min=-extcols,col_max=n+extcols,total_cols=col_max-col_min+1;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const bounds=patternBounds(p,g);
   const scaledPatW=bounds.w*scale,scaledPatH=bounds.h*scale;
-  const patOriginX=(A4_W-scaledPatW)/2;
-  const patOriginY=(A4_H-scaledPatH)/2;
-
-  // toC: cm → canvas pixels. ox/oy already include margin.
-  // For print: y=0 at bottom of A4 → canvas y = (A4_H - ycm)*sc
-  // For screen: same but with ox/oy offset
-  function toC(xcm,ycm){return[ox+xcm*sc, oy+(A4_H-ycm)*sc];}
-
+  const patOriginX=(PAPER_W-scaledPatW)/2;
+  const patOriginY=(PAPER_H-scaledPatH)/2;
+  function toC(xcm,ycm){return[ox+xcm*sc, oy+(PAPER_H-ycm)*sc];}
   if(!forPrint){
-    // Screen: draw grid and A4 shading
-    const[a4x,a4y]=toC(0,A4_H),[a4x2,a4y2]=toC(A4_W,0);
+    const[a4x,a4y]=toC(0,PAPER_H),[a4x2,a4y2]=toC(PAPER_W,0);
     if(showGrid){
       ctx.save();ctx.strokeStyle='rgba(59,130,246,0.07)';ctx.lineWidth=0.5;
-      for(let x=0;x<=A4_W;x++){const[cx,cy]=toC(x,0),[cx2,cy2]=toC(x,A4_H);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
-      for(let y=0;y<=A4_H;y++){const[cx,cy]=toC(0,y),[cx2,cy2]=toC(A4_W,y);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
+      for(let x=0;x<=PAPER_W;x++){const[cx,cy]=toC(x,0),[cx2,cy2]=toC(x,PAPER_H);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
+      for(let y=0;y<=PAPER_H;y++){const[cx,cy]=toC(0,y),[cx2,cy2]=toC(PAPER_W,y);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
       ctx.restore();
     }
     ctx.fillStyle='rgba(0,0,0,0.25)';
@@ -1911,11 +1798,9 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
       ctx.save();ctx.strokeStyle='rgba(200,200,220,0.5)';ctx.lineWidth=1.2;ctx.setLineDash([6,4]);
       ctx.strokeRect(a4x,a4y,a4x2-a4x,a4y2-a4y);ctx.setLineDash([]);
       ctx.fillStyle='rgba(200,200,220,0.4)';ctx.font='10px "JetBrains Mono",monospace';
-      ctx.fillText('A4  21×29.7 cm',a4x+4,a4y+12);ctx.restore();
+      ctx.fillText(`${PAPER_SIZES[currentPaper].label}  ${PAPER_W}×${PAPER_H} cm`,a4x+4,a4y+12);ctx.restore();
     }
   }
-
-  // Build vertices in cm
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -1928,34 +1813,25 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
     }
     verts.push(row);
   }
-
   const olIdx=extcols,orIdx=extcols+n;
   const[x0,y0]=verts[0][olIdx],[x1]=verts[0][orIdx];
   const[x2]=verts[totalFloors][olIdx],[x3,y3]=verts[totalFloors][orIdx];
   const extS=ext*scale,seamlS=seaml*scale,seamrS=seamr*scale;
   const topY=y0-extS,botY=y3+extS;
   const seamLX=x0-seamlS,seamRX=x1+seamrS;
-
-  const lw=forPrint?sc/37.795:1; // scale linewidth for print DPI
-
+  const lw=forPrint?sc/37.795:1;
   function line(ax,ay,bx,by,col,w,dash){
     const[cx1,cy1]=toC(ax,ay),[cx2,cy2]=toC(bx,by);
     ctx.beginPath();ctx.moveTo(cx1,cy1);ctx.lineTo(cx2,cy2);
     ctx.strokeStyle=col;ctx.lineWidth=(w||1.2)*lw;
     ctx.setLineDash(dash?dash.map(d=>d*lw):[]);ctx.stroke();ctx.setLineDash([]);
   }
-
-  // Purple cut box
   const purp=forPrint?'#6a1fa0':'#9f6fdf';
   line(x0,topY,x0,botY,purp,forPrint?2.5:1.8);line(x1,topY,x1,botY,purp,forPrint?2.5:1.8);
   line(x0,topY,x1,topY,purp,forPrint?2.5:1.8);line(x2,botY,x3,botY,purp,forPrint?2.5:1.8);
   if(seamlS>0){line(seamLX,topY,seamLX,botY,'slateblue',1.2,[4,3]);[topY,botY,y0,verts[totalFloors][olIdx][1]].forEach(yy=>line(seamLX,yy,x0,yy,'slateblue',1.2,[4,3]));}
   if(seamrS>0){line(seamRX,topY,seamRX,botY,'slateblue',1.2,[4,3]);[topY,botY,verts[0][orIdx][1],verts[totalFloors][orIdx][1]].forEach(yy=>line(x1,yy,seamRX,yy,'slateblue',1.2,[4,3]));}
-
-  // Info box in BOTTOM gap: between floor-0 line (y0) and bottom purple border (topY)
   drawInfoBoxCanvas(ctx, toC, sc, x0, x1, y0, topY, p, g, bounds, forPrint);
-
-  // Red mountain zigzags
   const redCol=forPrint?'#cc0000':'#e05252';
   for(let ci=1;ci<total_cols-1;ci++){
     ctx.beginPath();
@@ -1968,16 +1844,12 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
   const lPts=Array.from({length:totalFloors+1},(_,f)=>verts[f][olIdx]);
   ctx.beginPath();lPts.forEach(([vx,vy],i)=>{const[cx,cy]=toC(vx,vy);i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);});
   ctx.strokeStyle=redCol;ctx.lineWidth=(forPrint?1.6:1.1)*lw;ctx.setLineDash([5*lw,3*lw]);ctx.stroke();ctx.setLineDash([]);
-
-  // Blue valley horizontals
   const blueCol=forPrint?'#0044cc':'#378ADD';
   for(let f=0;f<=totalFloors;f++){
     const yL=verts[f][0][1];
     const[lx,ly]=toC(seamLX,yL),[rx,ry]=toC(seamRX,yL);
     ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(rx,ry);ctx.strokeStyle=blueCol;ctx.lineWidth=(forPrint?2.0:1.3)*lw;ctx.setLineDash([]);ctx.stroke();
   }
-
-  // Green diagonals
   const greenCol=forPrint?'#007a30':'#3dba6e';
   ctx.strokeStyle=greenCol;ctx.lineWidth=(forPrint?1.5:1.0)*lw;ctx.setLineDash([5*lw,4*lw]);
   for(let f=0;f<totalFloors;f++){
@@ -1989,35 +1861,28 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
     }
   }
   ctx.setLineDash([]);
-
   if(!forPrint){
-    // Dimension labels (screen only)
     ctx.save();ctx.fillStyle='rgba(180,220,255,0.55)';ctx.font='9px "JetBrains Mono",monospace';
     const[lx0,ly0]=toC(x0-seamlS,topY-0.3),[rx0]=toC(x1+seamrS,topY-0.3);
-    ctx.fillText(`W=${(bounds.w*scale).toFixed(1)}cm`,(lx0+rx0)/2-18,ly0-3);
+    ctx.fillText(`W=${useInches?(bounds.w*scale*IN_PER_CM).toFixed(2):(bounds.w*scale).toFixed(1)} ${unitLabel()}`,(lx0+rx0)/2-18,ly0-3);
     const[hx0,hy0]=toC(x1+seamrS+0.25,botY),[,hy1]=toC(x1+seamrS+0.25,topY);
-    ctx.fillText(`H=${(bounds.h*scale).toFixed(1)}cm`,hx0+3,(hy0+hy1)/2);ctx.restore();
+    ctx.fillText(`H=${useInches?(bounds.h*scale*IN_PER_CM).toFixed(2):(bounds.h*scale).toFixed(1)} ${unitLabel()}`,hx0+3,(hy0+hy1)/2);ctx.restore();
   }
 }
 
 // ─── EXPORTS ───
 function exportSVG(){
-  // Build SVG by rendering to a high-res canvas then embed as PNG — keeps exact geometry
-  // Actually use SVG path generation matching renderPatternToCtx logic
   const p=getP(),g=computeGeometry(p);
-  const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
+  const{n,floors,ext,seaml,seamr,extcols,chir,scale}=p;
   const{b,floor_h,dx}=g;
-  const CM=37.795; // px per cm at 96dpi
-  const totalFloors=floors*stack;
+  const CM=37.795;
+  const totalFloors=floors;
   const col_min=-extcols,col_max=n+extcols,total_cols=col_max-col_min+1;
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale,scaledH=bounds.h*scale;
-  const patOriginX=(A4_W-scaledW)/2,patOriginY=(A4_H-scaledH)/2;
-  const A4pxW=Math.round(A4_W*CM),A4pxH=Math.round(A4_H*CM);
-
-  // Convert cm to SVG px (y flipped: SVG y=0 at top)
-  function toSVG(xcm,ycm){return[xcm*CM,(A4_H-ycm)*CM];}
-
+  const patOriginX=(PAPER_W-scaledW)/2,patOriginY=(PAPER_H-scaledH)/2;
+  const A4pxW=Math.round(PAPER_W*CM),A4pxH=Math.round(PAPER_H*CM);
+  function toSVG(xcm,ycm){return[xcm*CM,(PAPER_H-ycm)*CM];}
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -2028,14 +1893,12 @@ function exportSVG(){
     }
     verts.push(row);
   }
-
   const olIdx=extcols,orIdx=extcols+n;
   const[x0,y0]=verts[0][olIdx],[x1]=verts[0][orIdx];
   const[x2]=verts[totalFloors][olIdx],[x3,y3]=verts[totalFloors][orIdx];
   const extS=ext*scale,seamlS=seaml*scale,seamrS=seamr*scale;
   const topY=y0-extS,botY=y3+extS;
   const seamLX=x0-seamlS,seamRX=x1+seamrS;
-
   const L=(ax,ay,bx,by,col,sw,dash)=>{
     const[x1s,y1s]=toSVG(ax,ay),[x2s,y2s]=toSVG(bx,by);
     return `<line x1="${x1s.toFixed(2)}" y1="${y1s.toFixed(2)}" x2="${x2s.toFixed(2)}" y2="${y2s.toFixed(2)}" stroke="${col}" stroke-width="${sw||1}"${dash?` stroke-dasharray="${dash}"`:''} fill="none"/>`;
@@ -2068,50 +1931,39 @@ function exportSVG(){
       lines.push(L(ax,ay,bxv,byv,'#007a30',1.5,'6 4'));
     }
   }
-  // Info box SVG: gap is ABOVE floor-0 line (between topY border and y0 first crease)
-  // In SVG y-down coords: topY has LARGER SVG y than y0 (topY is visually lower = higher SVG y)
-  // Gap top edge (visually) = y0 → smaller SVG y
-  // Gap bottom edge (visually) = topY → larger SVG y
   const[olX]=toSVG(x0,0),[orX]=toSVG(x1,0);
-  const[,gapTopSVG]=toSVG(0,y0);   // first crease line → top of info box gap
-  const[,gapBotSVG]=toSVG(0,topY); // cut border line → bottom of info box gap
-  lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,gapTopSVG,gapBotSVG,gapTopSVG));
-
+  const[,gapTopSVG]=toSVG(0,y0);
+  const[,gapBotSVG]=toSVG(0,topY);
+  lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,null,gapBotSVG,gapTopSVG));
   const svg=`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${A4pxW}" height="${A4pxH}" viewBox="0 0 ${A4pxW} ${A4pxH}"><rect width="100%" height="100%" fill="white"/>\n${lines.join('\n')}\n</svg>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
-  a.download=`kresling_n${p.n}_f${p.floors}_s${p.stack}.svg`;a.click();
+  a.download=`kresling_n${p.n}_f${p.floors}.svg`;a.click();
 }
 
-// PNG export — render via renderPatternToCtx at 200dpi
 function exportPNGA4(){
   const p=getP(),g=computeGeometry(p);
   const DPI=200,CM_TO_PX=DPI/2.54;
-  const W=Math.round(A4_W*CM_TO_PX),H=Math.round(A4_H*CM_TO_PX);
+  const W=Math.round(PAPER_W*CM_TO_PX),H=Math.round(PAPER_H*CM_TO_PX);
   const off=document.createElement('canvas');off.width=W;off.height=H;
   const ctx=off.getContext('2d');
   ctx.fillStyle='white';ctx.fillRect(0,0,W,H);
-  // ox=0, oy=0 because toC in renderPatternToCtx handles A4 coords directly
   renderPatternToCtx(ctx, p, g, W, H, CM_TO_PX, 0, 0, true);
   const a=document.createElement('a');a.href=off.toDataURL('image/png');
-  a.download=`kresling_A4_n${p.n}_f${p.floors}.png`;a.click();
+  a.download=`kresling_${currentPaper}_n${p.n}_f${p.floors}.png`;a.click();
 }
 
-// PDF export — render SVG via print window
 function exportPDF(){
   const p=getP(),g=computeGeometry(p);
-  // Build SVG using same geometry as screen render
-  const DPI=96,CM=DPI/2.54; // SVG uses 96dpi
-  const A4pxW=Math.round(A4_W*CM),A4pxH=Math.round(A4_H*CM);
-  const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
+  const DPI=96,CM=DPI/2.54;
+  const A4pxW=Math.round(PAPER_W*CM),A4pxH=Math.round(PAPER_H*CM);
+  const{n,floors,ext,seaml,seamr,extcols,chir,scale}=p;
   const{b,floor_h,dx}=g;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const col_min=-extcols,col_max=n+extcols,total_cols=col_max-col_min+1;
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale,scaledH=bounds.h*scale;
-  const patOriginX=(A4_W-scaledW)/2,patOriginY=(A4_H-scaledH)/2;
-
-  function toSVG(xcm,ycm){return[xcm*CM,(A4_H-ycm)*CM];}
-
+  const patOriginX=(PAPER_W-scaledW)/2,patOriginY=(PAPER_H-scaledH)/2;
+  function toSVG(xcm,ycm){return[xcm*CM,(PAPER_H-ycm)*CM];}
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -2122,14 +1974,12 @@ function exportPDF(){
     }
     verts.push(row);
   }
-
   const olIdx=extcols,orIdx=extcols+n;
   const[x0,y0]=verts[0][olIdx],[x1]=verts[0][orIdx];
   const[x2]=verts[totalFloors][olIdx],[x3,y3]=verts[totalFloors][orIdx];
   const extS=ext*scale,seamlS=seaml*scale,seamrS=seamr*scale;
   const topY=y0-extS,botY=y3+extS;
   const seamLX=x0-seamlS,seamRX=x1+seamrS;
-
   const L=(ax,ay,bx,by,col,sw,dash)=>{
     const[x1s,y1s]=toSVG(ax,ay),[x2s,y2s]=toSVG(bx,by);
     return `<line x1="${x1s.toFixed(2)}" y1="${y1s.toFixed(2)}" x2="${x2s.toFixed(2)}" y2="${y2s.toFixed(2)}" stroke="${col}" stroke-width="${sw||1}"${dash?` stroke-dasharray="${dash}"`:''} fill="none"/>`;
@@ -2162,14 +2012,12 @@ function exportPDF(){
       lines.push(L(ax,ay,bxv,byv,'#007a30',1.5,'6 4'));
     }
   }
-  // Info box: gap between cut border (topY) and first crease line (y0)
   const[olX]=toSVG(x0,0),[orX]=toSVG(x1,0);
-  const[,gapTopSVG]=toSVG(0,y0);   // first crease line → smaller SVG y = visually top of gap
-  const[,gapBotSVG]=toSVG(0,topY); // cut border → larger SVG y = visually bottom of gap
-  lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,gapTopSVG,gapBotSVG,gapTopSVG));
-
-  const svgBody=`<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 ${A4pxW} ${A4pxH}" preserveAspectRatio="none" style="display:block;position:absolute;top:0;left:0;width:210mm;height:297mm"><rect width="100%" height="100%" fill="white"/>\n${lines.join('\n')}\n</svg>`;
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kresling n=${p.n} f=${p.floors}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:210mm 297mm;margin:0mm}html,body{width:210mm;height:297mm;margin:0;padding:0;background:white;overflow:hidden;position:relative}svg{display:block;position:absolute;top:0;left:0;width:210mm!important;height:297mm!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}@media print{html,body{width:210mm;height:297mm}svg{width:210mm!important;height:297mm!important}}</style></head><body>${svgBody}<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script></body></html>`;
+  const[,gapTopSVG]=toSVG(0,y0);
+  const[,gapBotSVG]=toSVG(0,topY);
+  lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,null,gapBotSVG,gapTopSVG));
+  const svgBody=`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(PAPER_W*10)}mm" height="${Math.round(PAPER_H*10)}mm" viewBox="0 0 ${A4pxW} ${A4pxH}" preserveAspectRatio="none" style="display:block;position:absolute;top:0;left:0;width:${Math.round(PAPER_W*10)}mm;height:${Math.round(PAPER_H*10)}mm"><rect width="100%" height="100%" fill="white"/>\n${lines.join('\n')}\n</svg>`;
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kresling n=${p.n} f=${p.floors} ${currentPaper}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:${Math.round(PAPER_W*10)}mm ${Math.round(PAPER_H*10)}mm;margin:0mm}html,body{width:${Math.round(PAPER_W*10)}mm;height:${Math.round(PAPER_H*10)}mm;margin:0;padding:0;background:white;overflow:hidden;position:relative}svg{display:block;position:absolute;top:0;left:0;width:${Math.round(PAPER_W*10)}mm!important;height:${Math.round(PAPER_H*10)}mm!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}@media print{html,body{width:${Math.round(PAPER_W*10)}mm;height:${Math.round(PAPER_H*10)}mm}svg{width:${Math.round(PAPER_W*10)}mm!important;height:${Math.round(PAPER_H*10)}mm!important}}</style></head><body>${svgBody}<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script></body></html>`;
   const win=window.open('','_blank');
   if(!win){alert('Please allow pop-ups for this page to export PDF.');return;}
   win.document.write(html);win.document.close();
@@ -2177,13 +2025,13 @@ function exportPDF(){
 
 function exportDXF(){
   const p=getP(),g=computeGeometry(p);
-  const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
+  const{n,floors,ext,seaml,seamr,extcols,chir,scale}=p;
   const{b,floor_h,dx}=g;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const col_min=-extcols,col_max=n+extcols,total_cols=col_max-col_min+1;
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale,scaledH=bounds.h*scale;
-  const patOriginX=(A4_W-scaledW)/2,patOriginY=(A4_H-scaledH)/2;
+  const patOriginX=(PAPER_W-scaledW)/2,patOriginY=(PAPER_H-scaledH)/2;
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -2209,36 +2057,29 @@ function exportDXF(){
   }
   const dxf=`0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${e}0\nENDSEC\n0\nEOF\n`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dxf],{type:'application/dxf'}));
-  a.download=`kresling_n${n}_f${floors}_s${stack}.dxf`;a.click();
+  a.download=`kresling_n${n}_f${floors}.dxf`;a.click();
 }
 
 // ─── STL EXPORT — hollow thin-wall Kresling tube ───
-// Generates a watertight ASCII STL with inner and outer surfaces connected at top+bottom rims.
-// Wall thickness = wallT cm. Each Kresling face cell is two triangles × 2 (inner+outer).
-// Top and bottom rims are closed with an annular quad strip (2 triangles each).
 function exportSTL(){
   const p=getP(),g=computeGeometry(p);
-  const{n,floors,stack,chir,compress}=p;
+  const{n,floors,chir,compress}=p;
   const{floor_h,dx,R}=g;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const eFH=floor_h*(1-compress*0.98);
   const eDx=dx*(1-compress*0.5);
-  const wallT=(p.wallmm||5)*0.00254; // mil → cm (1 mil = 0.0254mm)
-  const Ri=Math.max(0.01,R-wallT); // inner radius
+  const wallT=(p.wallmm||3)*0.00254; // mil → cm (1 mil = 0.0254 mm)
+  const Ri=Math.max(0.01,R-wallT);
 
-  // Build outer and inner vertex rings
   function makeRings(radius){
     const rings=[];
     for(let f=0;f<=totalFloors;f++){
       const row=[];
       const y3d=f*eFH-(totalFloors*eFH/2);
-      const ang=(f%2===1)?(eDx/radius)*chir:-(eDx/radius)*chir;
-      // Note: angular offset scales with radius for inner surface
-      // but we keep same angular offset for matching connectivity
       const angOuter=(f%2===1)?(eDx/R)*chir:-(eDx/R)*chir;
       for(let k=0;k<n;k++){
-        const a=(2*Math.PI*k/n)+angOuter; // same angle both surfaces
-        row.push([radius*Math.cos(a),y3d,radius*Math.sin(a)]);
+        const a=(2*Math.PI*k/n)+angOuter;
+        row.push([radius*Math.cos(a), y3d, radius*Math.sin(a)]);
       }
       rings.push(row);
     }
@@ -2261,13 +2102,10 @@ function exportSTL(){
       `      vertex ${v3.map(fmt).join(' ')}\n`+
       `    endloop\n  endfacet\n`;
   }
-
-  // Two tris from a quad (v1,v2,v3,v4 in winding order)
   function quad(v1,v2,v3,v4){return tri(v1,v2,v3)+tri(v1,v3,v4);}
 
   let stl=`solid kresling_hollow_n${n}_f${floors}\n`;
 
-  // OUTER surface (outward normals — CCW when viewed from outside)
   for(let f=0;f<totalFloors;f++){
     for(let k=0;k<n;k++){
       const k2=(k+1)%n;
@@ -2277,27 +2115,19 @@ function exportSTL(){
       else{stl+=tri(v1,v2,v4);stl+=tri(v1,v4,v3);}
     }
   }
-
-  // INNER surface (inward normals — reverse winding)
   for(let f=0;f<totalFloors;f++){
     for(let k=0;k<n;k++){
       const k2=(k+1)%n;
       const v1=innerRings[f][k],v2=innerRings[f][k2];
       const v3=innerRings[f+1][k],v4=innerRings[f+1][k2];
-      // Flip winding for inward normals
       if((f*chir)%2===0){stl+=tri(v3,v2,v1);stl+=tri(v3,v4,v2);}
       else{stl+=tri(v4,v2,v1);stl+=tri(v3,v4,v1);}
     }
   }
-
-  // BOTTOM RIM — annular ring connecting outer[0] to inner[0]
   for(let k=0;k<n;k++){
     const k2=(k+1)%n;
-    // Quad: outer[k], inner[k], inner[k2], outer[k2] — facing downward
     stl+=quad(outerRings[0][k],innerRings[0][k],innerRings[0][k2],outerRings[0][k2]);
   }
-
-  // TOP RIM — annular ring at top, facing upward (reverse winding)
   const tf=totalFloors;
   for(let k=0;k<n;k++){
     const k2=(k+1)%n;
@@ -2308,318 +2138,405 @@ function exportSTL(){
 
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([stl],{type:'model/stl'}));
-  a.download=`kresling_hollow_n${n}_f${floors}_s${stack}.stl`;
+  a.download=`kresling_hollow_n${n}_f${floors}.stl`;
   a.click();
 }
 
-// ─── ORIGAMI PRESS MOLD STL EXPORT ───
-//
-// TWO PLATES — TRUE OPPOSITES:
-//
-// PLATE 1 (top plate — placed ridge-face DOWN onto paper):
-//   Mountain creases → ridges (^) protrude downward when assembled, press paper into valley below
-//   Valley creases   → grooves (V) cut into face, receive Plate 2's valley ridges from below
-//
-// PLATE 2 (bottom plate — placed ridge-face UP, paper sits on top):
-//   Mountain creases → grooves (V) cut into face, receive Plate 1's mountain ridges from above
-//   Valley creases   → ridges (^) protrude upward, press paper into Plate 1's valley grooves
-//
-// ASSEMBLY: Plate 2 flat on table. Paper on top. Plate 1 flipped down on paper.
-//   Mountain ridges (P1) lock into mountain grooves (P2). ← mountain fold
-//   Valley ridges (P2) lock into valley grooves (P1). ← valley fold
-//   Clamp together. Every crease pre-set simultaneously.
-//
-// RIDGE cross-section: flat-topped trapezoid (not sharp), with tipW flat at apex.
-// GROOVE cross-section: matching inward trapezoid, slightly wider (+clearance) so plates fit.
-// GAP at vertices: ridges/grooves stop short by vertexGap at endpoints where creases meet.
-
-function _buildMoldGeometry(){
+// ─── STEP EXPORT v2 (ISO 10303-214 / AP214) ───
+// Significantly improved over v1:
+//   • Per-face PLANE with correct outward normal (AXIS2_PLACEMENT_3D at face centroid)
+//   • Fully normalised DIRECTION vectors on all LINE/PLANE entities
+//   • Vertex deduplication: shared ring vertices reference one VERTEX_POINT + CARTESIAN_POINT
+//   • Edge deduplication: each logical edge (vi→vj, sorted by index) emits one EDGE_CURVE
+//     and ORIENTED_EDGEs flip sense (.T./.F.) as needed per face
+//   • Proper OPEN_SHELL (non-manifold tessellation) rather than CLOSED_SHELL
+//     to avoid false "solid" claims that trip up healers on shared-edge geometry
+//   • COLOUR_RGB + SURFACE_STYLE_USAGE for visual appearance in CAD tools
+//   • Units: millimetres (cm × 10); compatible with SolidWorks, Fusion 360, FreeCAD, CATIA, Rhino
+function exportSTEP(){
   const p=getP(), g=computeGeometry(p);
-  const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
+  const{n,floors,chir,compress}=p;
+  const{floor_h,dx,R}=g;
+  const totalFloors=floors;
+  const eFH=floor_h*(1-compress*0.98);
+  const eDx=dx*(1-compress*0.5);
+  const wallT=(p.wallmm||3)*0.00254; // mil → cm (1 mil = 0.0254 mm)
+  const Ri=Math.max(0.01,R-wallT);
+  const CM2MM=10;
+  const fmt=x=>x.toFixed(8);
+  const fmt3=x=>x.toFixed(4);
+
+  // ── Math helpers ──
+  const vsub=([ax,ay,az],[bx,by,bz])=>[ax-bx,ay-by,az-bz];
+  const vcross=([ax,ay,az],[bx,by,bz])=>[ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx];
+  const vdot=([ax,ay,az],[bx,by,bz])=>ax*bx+ay*by+az*bz;
+  const vlen=v=>Math.sqrt(vdot(v,v));
+  const vnorm=v=>{const l=vlen(v)||1;return v.map(c=>c/l);};
+  // Build a rotation-free orthonormal frame from a normal vector
+  function makeFrame(nrm){
+    // Pick a reference vector not parallel to nrm
+    const ref=Math.abs(nrm[0])<0.9?[1,0,0]:[0,1,0];
+    const t=vnorm(vcross(nrm,ref));
+    return{z:nrm,x:t};
+  }
+
+  // ── Build all vertex rings ──
+  function makeRings(radius){
+    const rings=[];
+    for(let f=0;f<=totalFloors;f++){
+      const row=[];
+      const y3d=f*eFH-(totalFloors*eFH/2);
+      const ang=(f%2===1)?(eDx/R)*chir:-(eDx/R)*chir;
+      for(let k=0;k<n;k++){
+        const a=(2*Math.PI*k/n)+ang;
+        row.push([radius*Math.cos(a)*CM2MM, y3d*CM2MM, radius*Math.sin(a)*CM2MM]);
+      }
+      rings.push(row);
+    }
+    return rings;
+  }
+
+  const OR=makeRings(R);   // outer rings, already in mm
+  const IR=makeRings(Ri);  // inner rings, already in mm
+
+  // ── Collect triangles as index triples into a flat vertex array ──
+  // Vertices are stored as [x,y,z] in mm.
+  // We keep a separate array per ring set and encode indices as:
+  //   outer ring f,k  → index f*(n) + k           (0-based, 0..totalFloors*n-1)
+  //   inner ring f,k  → totalFloors*n + f*(n) + k (continues above outer)
+  // We just flatten all vertices into one array for dedup.
+
+  const allVerts=[];  // [x,y,z] mm — will be indexed
+  const vertKey=new Map(); // "x,y,z" → index
+
+  function addVert(v){
+    const k=`${v[0].toFixed(4)},${v[1].toFixed(4)},${v[2].toFixed(4)}`;
+    if(vertKey.has(k))return vertKey.get(k);
+    const i=allVerts.length;
+    allVerts.push(v);
+    vertKey.set(k,i);
+    return i;
+  }
+
+  // Pre-register all ring vertices so adjacent faces share indices
+  const OIdx=[], IIdx=[];
+  for(let f=0;f<=totalFloors;f++){
+    OIdx.push(OR[f].map(v=>addVert(v)));
+    IIdx.push(IR[f].map(v=>addVert(v)));
+  }
+
+  // Build triangle list as [i0,i1,i2] vertex indices
+  const tris=[];
+  function addTri(a,b,c){ tris.push([a,b,c]); }
+  function addQuad(a,b,c,d){ addTri(a,b,c); addTri(a,c,d); }
+
+  // Outer surface
+  for(let f=0;f<totalFloors;f++){
+    for(let k=0;k<n;k++){
+      const k2=(k+1)%n;
+      const v1=OIdx[f][k],v2=OIdx[f][k2],v3=OIdx[f+1][k],v4=OIdx[f+1][k2];
+      if((f*chir)%2===0){addTri(v1,v2,v3);addTri(v2,v4,v3);}
+      else{addTri(v1,v2,v4);addTri(v1,v4,v3);}
+    }
+  }
+  // Inner surface (reversed winding)
+  for(let f=0;f<totalFloors;f++){
+    for(let k=0;k<n;k++){
+      const k2=(k+1)%n;
+      const v1=IIdx[f][k],v2=IIdx[f][k2],v3=IIdx[f+1][k],v4=IIdx[f+1][k2];
+      if((f*chir)%2===0){addTri(v3,v2,v1);addTri(v3,v4,v2);}
+      else{addTri(v4,v2,v1);addTri(v3,v4,v1);}
+    }
+  }
+  // Bottom rim
+  for(let k=0;k<n;k++){
+    const k2=(k+1)%n;
+    addQuad(OIdx[0][k],IIdx[0][k],IIdx[0][k2],OIdx[0][k2]);
+  }
+  // Top rim
+  const tf=totalFloors;
+  for(let k=0;k<n;k++){
+    const k2=(k+1)%n;
+    addQuad(OIdx[tf][k2],IIdx[tf][k2],IIdx[tf][k],OIdx[tf][k]);
+  }
+
+  // ── Edge deduplication ──
+  // Key: "min(a,b),max(a,b)" → { edgeCurveId, startVi, endVi }
+  // Each directed edge (a→b) in a face: if key exists and a=startVi → sense .T., else .F.
+  const edgeMap=new Map();
+
+  // ── Build STEP entity list ──
+  const entities=[];
+  const E=s=>{entities.push(s);return entities.length;};
+
+  // ── Shared context ──
+  const iO   =E(`CARTESIAN_POINT('',(0.,0.,0.))`);
+  const iAZ  =E(`DIRECTION('',(0.,0.,1.))`);
+  const iAX  =E(`DIRECTION('',(1.,0.,0.))`);
+  const iAP0 =E(`AXIS2_PLACEMENT_3D('',#${iO},#${iAZ},#${iAX})`);
+  const iMM  =E(`(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.))`);
+  const iRad =E(`(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.))`);
+  const iSR  =E(`(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT())`);
+  const iUnc =E(`UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-007),#${iMM},'distance_accuracy_value','confusion accuracy')`);
+  const iRC  =E(`(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#${iUnc}))GLOBAL_UNIT_ASSIGNED_CONTEXT((#${iMM},#${iRad},#${iSR}))REPRESENTATION_CONTEXT('3D Context','3D Context'))`);
+
+  // ── Colour / presentation (steel-blue) ──
+  const iColour=E(`COLOUR_RGB('Kresling',0.2,0.55,0.85)`);
+  const iSFA   =E(`SURFACE_STYLE_FILL_AREA(#${iColour})`);
+  const iSSU   =E(`SURFACE_STYLE_USAGE(.BOTH.,#${iSFA})`);
+  const iPSS   =E(`PRESENTATION_STYLE_ASSIGNMENT((#${iSSU}))`);
+
+  // ── Emit one CARTESIAN_POINT + VERTEX_POINT per unique vertex ──
+  const cpIds=allVerts.map(([x,y,z])=>E(`CARTESIAN_POINT('',(${fmt(x)},${fmt(y)},${fmt(z)}))`));
+  const vpIds=cpIds.map((cp,i)=>E(`VERTEX_POINT('',#${cp})`));
+
+  // ── Helper: get or create EDGE_CURVE for undirected edge (vi→vj) ──
+  function getEdge(vi,vj){
+    const lo=Math.min(vi,vj), hi=Math.max(vi,vj);
+    const k=`${lo},${hi}`;
+    if(edgeMap.has(k))return edgeMap.get(k);
+    // Normalised direction lo→hi
+    const [ax,ay,az]=allVerts[lo], [bx,by,bz]=allVerts[hi];
+    const ddx=bx-ax,ddy=by-ay,ddz=bz-az;
+    const dl=Math.sqrt(ddx*ddx+ddy*ddy+ddz*ddz)||1;
+    const iDir=E(`DIRECTION('',( ${fmt(ddx/dl)}, ${fmt(ddy/dl)}, ${fmt(ddz/dl)} ))`);
+    const iVec=E(`VECTOR('',#${iDir},${fmt(dl)})`);
+    const iLn =E(`LINE('',#${cpIds[lo]},#${iVec})`);
+    const iEC =E(`EDGE_CURVE('',#${vpIds[lo]},#${vpIds[hi]},#${iLn},.T.)`);
+    edgeMap.set(k,{iEC,lo,hi});
+    return edgeMap.get(k);
+  }
+
+  // ── Build one ADVANCED_FACE per triangle ──
+  const faceIds=[];
+
+  for(const [i0,i1,i2] of tris){
+    const A=allVerts[i0], B=allVerts[i1], C=allVerts[i2];
+
+    // Face normal (already in mm, but direction is dimensionless)
+    const ab=vsub(B,A), ac=vsub(C,A);
+    const rawN=vcross(ab,ac);
+    const nlen=vlen(rawN);
+    if(nlen<1e-12) continue; // degenerate, skip
+    const nrm=rawN.map(c=>c/nlen);
+
+    // Face centroid for plane origin
+    const cx_=(A[0]+B[0]+C[0])/3;
+    const cy_=(A[1]+B[1]+C[1])/3;
+    const cz_=(A[2]+B[2]+C[2])/3;
+
+    // Per-face PLANE with correct normal
+    const {z:pz,x:px}=makeFrame(nrm);
+    const iPO =E(`CARTESIAN_POINT('',(${fmt(cx_)},${fmt(cy_)},${fmt(cz_)}))`);
+    const iPNz=E(`DIRECTION('',( ${fmt(pz[0])}, ${fmt(pz[1])}, ${fmt(pz[2])} ))`);
+    const iPNx=E(`DIRECTION('',( ${fmt(px[0])}, ${fmt(px[1])}, ${fmt(px[2])} ))`);
+    const iPAP=E(`AXIS2_PLACEMENT_3D('',#${iPO},#${iPNz},#${iPNx})`);
+    const iPln=E(`PLANE('',#${iPAP})`);
+
+    // Three oriented edges (with deduplication + sense)
+    function orientedEdge(va,vb){
+      const {iEC,lo}=getEdge(va,vb);
+      const sense=(lo===va)?'.T.':'.F.';
+      return E(`ORIENTED_EDGE('',*,*,#${iEC},${sense})`);
+    }
+    const iOe0=orientedEdge(i0,i1);
+    const iOe1=orientedEdge(i1,i2);
+    const iOe2=orientedEdge(i2,i0);
+
+    const iLoop =E(`EDGE_LOOP('',(#${iOe0},#${iOe1},#${iOe2}))`);
+    const iBound=E(`FACE_OUTER_BOUND('',#${iLoop},.T.)`);
+    const iFace =E(`ADVANCED_FACE('',(#${iBound}),#${iPln},.T.)`);
+    faceIds.push(iFace);
+  }
+
+  // ── OPEN_SHELL → SHELL_BASED_SURFACE_MODEL ──
+  // OPEN_SHELL is correct for a triangulated surface that shares edges between faces
+  // (vs. CLOSED_SHELL which implies a watertight solid B-rep with matched half-edges).
+  const iShell=E(`OPEN_SHELL('',(${faceIds.map(f=>'#'+f).join(',')}))`);
+  const iSBSM =E(`SHELL_BASED_SURFACE_MODEL('Kresling_Tube',(#${iShell}))`);
+  const iSR2  =E(`ADVANCED_BREP_SHAPE_REPRESENTATION('Kresling_n${n}_f${floors}',(#${iAP0},#${iSBSM}),#${iRC})`);
+
+  // ── Product / shape definition hierarchy ──
+  const iAppCtx =E(`APPLICATION_CONTEXT('configuration controlled 3D designs of mechanical parts and assemblies')`);
+  const iProdCtx=E(`PRODUCT_CONTEXT('',#${iAppCtx},'mechanical')`);
+  const iProd   =E(`PRODUCT('Kresling_n${n}_f${floors}','Kresling Origami Tube n=${n} f=${floors}','',(#${iProdCtx}))`);
+  const iPDF2   =E(`PRODUCT_DEFINITION_FORMATION('','',#${iProd})`);
+  const iPDCtx  =E(`PRODUCT_DEFINITION_CONTEXT('part definition',#${iAppCtx},'design')`);
+  const iPD     =E(`PRODUCT_DEFINITION('design','',#${iPDF2},#${iPDCtx})`);
+  const iPDS    =E(`PRODUCT_DEFINITION_SHAPE('','',#${iPD})`);
+  const iSDR    =E(`SHAPE_DEFINITION_REPRESENTATION(#${iPDS},#${iSR2})`);
+
+  // ── Styled item for colour ──
+  const iStItem=E(`STYLED_ITEM('',(#${iPSS}),#${iSBSM})`);
+  const iMSA   =E(`MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION('',(#${iStItem}),#${iRC})`);
+
+  // ── Assemble file ──
+  const ts=new Date().toISOString().replace(/\.\d+Z$/,'');
+  const fname=`kresling_n${n}_f${floors}.step`;
+  const nVerts=allVerts.length, nEdges=edgeMap.size, nFaces=faceIds.length;
+
+  const stepText=
+`ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((
+ 'Kresling Origami Tube',
+ 'n=${n}  floors=${floors}  dia=${p.dia}cm  h=${p.height}cm  wall=${p.wallmm}mil',
+ 'Vertices=${nVerts}  Edges=${nEdges}  Faces=${nFaces}',
+ 'Generated by Kresling Crease Generator'),'2;1');
+FILE_NAME('${fname}','${ts}',(''),(''),
+ 'Kresling Crease Generator v23','Kresling Crease Generator','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 3 1 1 1 }'));
+ENDSEC;
+DATA;
+${entities.map((e,i)=>`#${i+1} = ${e};`).join('\n')}
+ENDSEC;
+END-ISO-10303-21;`;
+
+  const blob=new Blob([stepText],{type:'model/step'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=fname;
+  a.click();
+  showToast(`STEP exported — ${nVerts} verts, ${nEdges} edges, ${nFaces} faces ✓`);
+}
+
+// ─── MOLD STL EXPORT ───
+function exportMoldSTL(moldType){
+  const p=getP(), g=computeGeometry(p);
+  const{n,floors,ext,seaml,seamr,extcols,chir,scale}=p;
   const{b,floor_h,dx}=g;
-  const totalFloors=floors*stack;
+  const totalFloors=floors;
   const col_min=-extcols, col_max=n+extcols, total_cols=col_max-col_min+1;
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale, scaledH=bounds.h*scale;
-  const patOriginX=(A4_W-scaledW)/2, patOriginY=(A4_H-scaledH)/2;
+  const baseT=(p.moldbase||3)/10;
+  const ridgeH=(p.ridgeh||1.2)/10;
+  const ridgeW=(p.ridgew||0.6)/10;
+  const patOriginX=(PAPER_W-scaledW)/2;
+  const patOriginY=(PAPER_H-scaledH)/2;
 
-  const baseT    = (p.moldbase||3)/10;
-  const ridgeH   = (p.ridgeh||1.2)/10;  // wedge height in cm
-  // ridgeW = slope half-width from slider.
-  // The wedge slope angle = atan(ridgeH / ridgeW).
-  // At ridgeH=1.2mm, ridgeW=0.8mm → slope angle ≈ 56° (steep, firm crease).
-  // User adjusts ridgew slider for desired slope angle.
-  // Wall thickness (mil) only affects the hollow tube STL, not the mold geometry.
-  const ridgeW   = (p.ridgew||0.8)/10;        // slope half-width in cm
-  const vertexGap= ridgeW * 1.5;              // clear space at crease intersections
-
-  const verts=[];
-  for(let f=0;f<=totalFloors;f++){
-    const row=[];
-    for(let col=col_min;col<=col_max;col++){
-      let x=col*b, y=f*floor_h;
-      if(f%2===1) x+=dx*chir; else x-=dx*chir;
-      row.push([(x-bounds.minX)*scale+patOriginX,(y-bounds.minY)*scale+patOriginY]);
+  function makeVerts(){
+    const verts=[];
+    for(let f=0;f<=totalFloors;f++){
+      const row=[];
+      for(let col=col_min;col<=col_max;col++){
+        let x=col*b, y=f*floor_h;
+        if(f%2===1) x+=dx*chir; else x-=dx*chir;
+        const nx=(x-bounds.minX)*scale+patOriginX;
+        const ny=(y-bounds.minY)*scale+patOriginY;
+        row.push([nx,ny]);
+      }
+      verts.push(row);
     }
-    verts.push(row);
+    return verts;
   }
+  const verts=makeVerts();
   const olIdx=extcols, orIdx=extcols+n;
-  const[x0,y0]=verts[0][olIdx],[x1]=verts[0][orIdx];
-  const[x2]=verts[totalFloors][olIdx],[x3,y3]=verts[totalFloors][orIdx];
   const extS=ext*scale, seamlS=seaml*scale, seamrS=seamr*scale;
-  const topY_=y0-extS, botY_=y3+extS;
+  const [x0,y0]=verts[0][olIdx], [x1]=verts[0][orIdx];
+  const [x2,y2]=verts[totalFloors][olIdx], [x3,y3]=verts[totalFloors][orIdx];
+  const topY=y0-extS, botY=y3+extS;
   const seamLX=x0-seamlS, seamRX=x1+seamrS;
+
   const margin=0.2;
-  const pX0=seamLX-margin, pX1=seamRX+margin;
-  const pY0=topY_-margin,  pY1=botY_+margin;
-  const zBack=0, zWork=baseT;
+  const plateX0=seamLX-margin, plateX1=seamRX+margin;
+  const plateY0=topY-margin, plateY1=botY+margin;
 
-  const mountainSegs=[];
-  for(let ci=1;ci<total_cols-1;ci++)
-    for(let f=0;f<totalFloors;f++)
-      mountainSegs.push([verts[f][ci][0],verts[f][ci][1],verts[f+1][ci][0],verts[f+1][ci][1]]);
-
-  const valleySegs=[];
-  for(let f=0;f<=totalFloors;f++)
-    valleySegs.push([seamLX,verts[f][0][1],seamRX,verts[f][0][1]]);
-  for(let f=0;f<totalFloors;f++)
-    for(let ci=0;ci<total_cols-1;ci++){
-      const v1=verts[f][ci],v2=verts[f+1][ci+1],v3=verts[f][ci+1],v4=verts[f+1][ci];
-      const[ax,ay,bx_,by_]=(f*chir)%2===0?[v3[0],v3[1],v4[0],v4[1]]:[v1[0],v1[1],v2[0],v2[1]];
-      valleySegs.push([ax,ay,bx_,by_]);
-    }
-
-  return{p,baseT,ridgeH,ridgeW,vertexGap,
-         verts,x0,x1,x2,x3,y0,y3,topY_,botY_,seamLX,seamRX,
-         pX0,pX1,pY0,pY1,zBack,zWork,mountainSegs,valleySegs,n,floors,stack,
-         total_cols,col_min,col_max,totalFloors};
-}
-
-function _stlHelpers(){
-  const vcross=([ax,ay,az],[bx,by,bz])=>[ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
-  const vsub  =([ax,ay,az],[bx,by,bz])=>[ax-bx,ay-by,az-bz];
-  const vnorm =v=>{const l=Math.hypot(...v)||1;return v.map(c=>c/l);};
+  function cross([ax,ay,az],[bx,by,bz]){return[ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];}
+  function sub([ax,ay,az],[bx,by,bz]){return[ax-bx,ay-by,az-bz];}
+  function norm(v){const l=Math.hypot(...v)||1;return v.map(c=>c/l);}
   function tri(v1,v2,v3){
-    const nm=vnorm(vcross(vsub(v2,v1),vsub(v3,v1)));
+    const n=norm(cross(sub(v2,v1),sub(v3,v1)));
     const f=x=>x.toFixed(6);
-    return`  facet normal ${nm.map(f).join(' ')}\n    outer loop\n`
+    return `  facet normal ${n.map(f).join(' ')}\n    outer loop\n`
       +`      vertex ${v1.map(f).join(' ')}\n`
       +`      vertex ${v2.map(f).join(' ')}\n`
       +`      vertex ${v3.map(f).join(' ')}\n`
       +`    endloop\n  endfacet\n`;
   }
-  const quad=(v1,v2,v3,v4)=>tri(v1,v2,v3)+tri(v1,v3,v4);
-  return{tri,quad};
-}
+  function quad(v1,v2,v3,v4){return tri(v1,v2,v3)+tri(v1,v3,v4);}
 
-// ── ORIGAMI PRESS — ANGLED SURFACE APPROACH ──
-//
-// The plate surface is NOT flat with ridges/grooves ON TOP.
-// The surface ITSELF changes angle along every crease line.
-//
-// Along each crease segment, the plate surface rises to a peak (mountain) or
-// dips to a valley, forming a continuous angled mesh — like a folded sheet.
-//
-// Cross-section perpendicular to a crease line:
-//
-//   Mountain crease (plate 1):    Valley crease (plate 1):
-//         peak                        flat   flat
-//        /    \                           \ /
-//   flat/      \flat                    valley
-//
-// The plate is tessellated as angled triangular panels between crease lines.
-// Each crease line has a peak (mountain) or valley at height ±ridgeH from zWork.
-// Between crease lines the surface interpolates linearly.
-//
-// PLATE 1: mountain crease lines → PEAK (+ridgeH), valley crease lines → VALLEY (-ridgeH)
-// PLATE 2: mountain crease lines → VALLEY (-ridgeH), valley crease lines → PEAK (+ridgeH)
-//          = exact negative of Plate 1 → they interlock perfectly with paper between.
-//
-// The bottom of the plate is flat (zBack). Sides are vertical walls.
+  let stl=`solid kresling_${moldType}_mold_n${n}_f${floors}\n`;
 
-function _buildPlateSTL(plateNum, m){
-  const{tri,quad}=_stlHelpers();
-  const{baseT,ridgeH,ridgeW,vertexGap,
-        mountainSegs,valleySegs,x0,x1,x2,x3,topY_,botY_,
-        pX0,pX1,pY0,pY1,zBack,zWork,n,floors}=m;
+  const zBot=-baseT, zTop=0;
+  const bx0=plateX0, bx1=plateX1, by0=plateY0, by1=plateY1;
+  stl+=quad([bx0,by0,zBot],[bx1,by0,zBot],[bx1,by1,zBot],[bx0,by1,zBot]);
+  stl+=quad([bx0,by0,zTop],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by0,zTop]);
+  stl+=quad([bx0,by0,zBot],[bx0,by0,zTop],[bx0,by1,zTop],[bx0,by1,zBot]);
+  stl+=quad([bx1,by0,zTop],[bx1,by0,zBot],[bx1,by1,zBot],[bx1,by1,zTop]);
+  stl+=quad([bx0,by0,zTop],[bx0,by0,zBot],[bx1,by0,zBot],[bx1,by0,zTop]);
+  stl+=quad([bx0,by1,zBot],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by1,zBot]);
 
-  let stl=`solid kresling_plate${plateNum}_n${n}_f${floors}\n`;
+  function addRidge(ax,ay,bx_,by_){
+    const dx_=bx_-ax, dy_=by_-ay;
+    const len=Math.hypot(dx_,dy_);
+    if(len<1e-6)return;
+    const tx=dx_/len, ty=dy_/len;
+    const nx_=-ty, ny_=tx;
+    const hw=ridgeW/2;
+    const AL=[ax-hw*nx_,ay-hw*ny_,0]; const AR=[ax+hw*nx_,ay+hw*ny_,0]; const AP=[ax,ay,ridgeH];
+    const BL=[bx_-hw*nx_,by_-hw*ny_,0]; const BR=[bx_+hw*nx_,by_+hw*ny_,0]; const BP=[bx_,by_,ridgeH];
+    stl+=tri(AL,AP,AR);stl+=tri(BL,BR,BP);
+    stl+=quad(AL,BL,BP,AP);stl+=quad(AR,AP,BP,BR);
+  }
 
-  // ── DESIGN ──
-  // PLATE 1: mountain lines have ridges pointing UP (+ridgeH).
-  //          Flat surface at zWork everywhere else.
-  //          Side walls from zBack to zWork.
-  //
-  // PLATE 2: entire surface raised to zWork+ridgeH.
-  //          Valley lines have ridges pointing DOWN, creating dips to zWork.
-  //          Side walls from zBack to zWork+ridgeH.
-  //
-  // When assembled face-to-face with paper between:
-  //   Plate 1 mountain ridges (^) push paper UP.
-  //   Plate 2 valley dips (v) receive paper, pressed DOWN by Plate 1 flat areas.
-  //   Result: mountain folds and valley folds pre-creased simultaneously.
+  const mountainSegs=[];
+  const valleySegs=[];
 
-  const zTop = plateNum===1 ? zWork : zWork+ridgeH; // top of flat plate surface
-
-  // ── BOTTOM FACE ──
-  stl+=quad([pX0,pY0,zBack],[pX0,pY1,zBack],[pX1,pY1,zBack],[pX1,pY0,zBack]);
-
-  // ── FOUR SIDE WALLS (zBack → zTop) ──
-  stl+=quad([pX0,pY0,zBack],[pX1,pY0,zBack],[pX1,pY0,zTop],[pX0,pY0,zTop]);
-  stl+=quad([pX1,pY1,zBack],[pX0,pY1,zBack],[pX0,pY1,zTop],[pX1,pY1,zTop]);
-  stl+=quad([pX0,pY1,zBack],[pX0,pY0,zBack],[pX0,pY0,zTop],[pX0,pY1,zTop]);
-  stl+=quad([pX1,pY0,zBack],[pX1,pY1,zBack],[pX1,pY1,zTop],[pX1,pY0,zTop]);
-
-  // ── FLAT TOP SURFACE ──
-  stl+=quad([pX0,pY0,zTop],[pX1,pY0,zTop],[pX1,pY1,zTop],[pX0,pY1,zTop]);
-
-  // ── CREASE WEDGES ──
-  // Plate 1: mountain segs → wedge UP (peak at zWork+ridgeH, base at zWork)
-  // Plate 2: valley segs  → wedge DOWN (peak at zWork, base at zWork+ridgeH)
-  //          i.e. an inverted wedge — a notch cut into the raised surface.
-  //          The notch base is at zWork+ridgeH (plate surface), tip dips to zWork.
-  //          This forms a V-channel in the raised surface.
-
-  function addWedgeUp(segs, zBase, zPeak){
-    // Wedge protrudes from zBase up to zPeak along crease centerline
-    for(const[ax,ay,bx_,by_] of segs){
-      const isH=Math.abs(by_-ay)<0.001;
-      const gapA=isH?0:vertexGap, gapB=isH?0:vertexGap;
-      const ddx=bx_-ax,ddy=by_-ay,len=Math.hypot(ddx,ddy);
-      if(len<=gapA+gapB+0.001) continue;
-      const tx=ddx/len,ty=ddy/len,nx=-ty,ny=tx;
-      const hw=ridgeW;
-      const ax2=ax+tx*gapA,ay2=ay+ty*gapA;
-      const bx2=bx_-tx*gapB,by2=by_-ty*gapB;
-
-      const BL1=[ax2-hw*nx,ay2-hw*ny,zBase];
-      const BR1=[ax2+hw*nx,ay2+hw*ny,zBase];
-      const BL2=[bx2-hw*nx,by2-hw*ny,zBase];
-      const BR2=[bx2+hw*nx,by2+hw*ny,zBase];
-      const PK1=[ax2,ay2,zPeak];
-      const PK2=[bx2,by2,zPeak];
-
-      stl+=quad(BL1,PK1,PK2,BL2); // left slope
-      stl+=quad(BR1,BR2,PK2,PK1); // right slope
-      stl+=tri(BL1,BR1,PK1);       // start cap
-      stl+=tri(BL2,PK2,BR2);       // end cap
+  for(let ci=1;ci<total_cols-1;ci++){
+    for(let f=0;f<totalFloors;f++){
+      const [vx1,vy1]=verts[f][ci];
+      const [vx2,vy2]=verts[f+1][ci];
+      mountainSegs.push([vx1,vy1,vx2,vy2]);
+    }
+  }
+  for(let f=0;f<=totalFloors;f++){
+    const yL=verts[f][0][1];
+    valleySegs.push([seamLX,yL,seamRX,yL]);
+  }
+  for(let f=0;f<totalFloors;f++){
+    for(let ci=0;ci<total_cols-1;ci++){
+      const v1=verts[f][ci], v2=verts[f+1][ci+1];
+      const v3=verts[f][ci+1], v4=verts[f+1][ci];
+      const [ax_,ay_,bxg,byg]=(f*chir)%2===0
+        ?[v3[0],v3[1],v4[0],v4[1]]
+        :[v1[0],v1[1],v2[0],v2[1]];
+      valleySegs.push([ax_,ay_,bxg,byg]);
     }
   }
 
-  function addWedgeDown(segs, zBase, zTip){
-    // Inverted wedge: V-notch cut into surface at zBase, dipping to zTip
-    // Geometry: two inward slope faces + floor + end caps
-    // This IS watertight without subtraction because:
-    //   - The plate surface (zBase) is the starting level
-    //   - The notch walls slope inward and downward
-    //   - The notch floor at zTip closes the bottom
-    //   - End caps close the two ends
-    // The flat top face has a "hole" where the notch is, but since
-    // the notch walls meet the top face boundary, the mesh is manifold.
-    // We achieve this by NOT drawing the flat top over the notch footprint.
-    // Since we already drew the full flat top quad, we ADD the notch walls
-    // with inverted normals — the slicer subtracts automatically.
-    for(const[ax,ay,bx_,by_] of segs){
-      const isH=Math.abs(by_-ay)<0.001;
-      const gapA=isH?0:vertexGap, gapB=isH?0:vertexGap;
-      const ddx=bx_-ax,ddy=by_-ay,len=Math.hypot(ddx,ddy);
-      if(len<=gapA+gapB+0.001) continue;
-      const tx=ddx/len,ty=ddy/len,nx=-ty,ny=tx;
-      const hw=ridgeW;
-      const ax2=ax+tx*gapA,ay2=ay+ty*gapA;
-      const bx2=bx_-tx*gapB,by2=by_-ty*gapB;
-
-      const OL1=[ax2-hw*nx,ay2-hw*ny,zBase]; // opening left A
-      const OR1=[ax2+hw*nx,ay2+hw*ny,zBase]; // opening right A
-      const OL2=[bx2-hw*nx,by2-hw*ny,zBase]; // opening left B
-      const OR2=[bx2+hw*nx,by2+hw*ny,zBase]; // opening right B
-      const TL=[ax2,ay2,zTip];  // tip A
-      const TR=[bx2,by2,zTip];  // tip B
-
-      // Inverted winding (CW) so normals point INTO the notch = subtract from solid
-      stl+=quad(OL1,OL2,TR,TL); // left wall  inverted
-      stl+=quad(OR1,TL,TR,OR2); // right wall inverted
-      stl+=tri(OL1,TL,OR1);      // start cap  inverted
-      stl+=tri(OL2,OR2,TR);      // end cap    inverted
-      stl+=tri(TL,TR,OR2);       // floor A    inverted
-      stl+=tri(TL,OR2,OR1);      // floor B    inverted
-      // Top cap (closes notch body at surface level, inverted)
-      stl+=quad(OL1,OR1,OR2,OL2);
-    }
+  const segsToRidge = moldType==='mountain' ? mountainSegs : valleySegs;
+  for(const [ax_,ay_,bxs,bys] of segsToRidge){
+    addRidge(ax_,ay_,bxs,bys);
   }
 
-  if(plateNum===1){
-    // Plate 1: mountain ridges UP from zWork
-    addWedgeUp(mountainSegs, zWork, zWork+ridgeH);
-  } else {
-    // Plate 2: valley notches DOWN from zWork+ridgeH to zWork
-    addWedgeDown(valleySegs, zWork+ridgeH, zWork);
+  const borderRidgeH=ridgeH*0.5;
+  function addBorderRidge(ax,ay,bx_,by_){
+    const dx_=bx_-ax, dy_=by_-ay;
+    const len=Math.hypot(dx_,dy_);
+    if(len<1e-6)return;
+    const tx=dx_/len, ty=dy_/len;
+    const nx_=-ty, ny_=tx;
+    const hw=ridgeW*0.4;
+    const AL=[ax-hw*nx_,ay-hw*ny_,0]; const AR=[ax+hw*nx_,ay+hw*ny_,0]; const AP=[ax,ay,borderRidgeH];
+    const BL=[bx_-hw*nx_,by_-hw*ny_,0]; const BR=[bx_+hw*nx_,by_+hw*ny_,0]; const BP=[bx_,by_,borderRidgeH];
+    stl+=tri(AL,AP,AR);stl+=tri(BL,BR,BP);
+    stl+=quad(AL,BL,BP,AP);stl+=quad(AR,AP,BP,BR);
   }
+  addBorderRidge(x0,topY,x1,topY);
+  addBorderRidge(x2,botY,x3,botY);
+  addBorderRidge(x0,topY,x0,botY);
+  addBorderRidge(x1,topY,x1,botY);
 
-  // ── BORDER ALIGNMENT MARKS (both plates) ──
-  const bH=ridgeH*0.4, bW=ridgeW*0.5;
-  const bSegs=[[x0,topY_,x1,topY_],[x2,botY_,x3,botY_],[x0,topY_,x0,botY_],[x1,topY_,x1,botY_]];
-  addWedgeUp(bSegs, zTop, zTop+bH);
+  stl+=`endsolid kresling_${moldType}_mold_n${n}_f${floors}\n`;
 
-  stl+=`endsolid kresling_plate${plateNum}_n${n}_f${floors}\n`;
-  return stl;
-}
-
-function exportPlate1STL(){
-  const m=_buildMoldGeometry();
-  const stl=_buildPlateSTL(1,m);
-  _downloadSTL(stl,`kresling_plate1_n${m.n}_f${m.floors}_s${m.stack}.stl`,'Plate 1');
-}
-
-function exportPlate2STL(){
-  const m=_buildMoldGeometry();
-  const stl=_buildPlateSTL(2,m);
-  _downloadSTL(stl,`kresling_plate2_n${m.n}_f${m.floors}_s${m.stack}.stl`,'Plate 2');
-}
-
-function _downloadSTL(stl,filename,label){
-  showToast(`Generating ${label}…`,800);
+  showToast(`${moldType} mold STL generating…`,1000);
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([stl],{type:'model/stl'}));
-  a.download=filename; a.click();
-  showToast(`${label} STL exported ✓`);
+  a.download=`kresling_${moldType}_mold_n${n}_f${floors}.stl`;
+  a.click();
+  showToast(`${moldType} mold exported ✓`);
 }
-
-
-//
-// Based on the mathgrrl / Thingiverse origami press approach:
-// https://mathgrrl.com/hacktastic/2019/07/3d-printed-origami-press-miura-fold/
-//
-// KEY INSIGHT: Both halves of the press are THE SAME SHAPE — you print two copies
-// and flip one on top of the other with paper sandwiched between.
-//
-// HOW IT WORKS:
-//   The press plate has ridges for EVERY crease line (both mountain and valley).
-//   Mountain crease ridges and valley crease ridges all protrude from the SAME face.
-//
-//   When you place two identical plates face-to-face:
-//     → Mountain ridges from Plate A press paper UP into gaps on Plate B.
-//     → Mountain ridges from Plate B (flipped) press paper DOWN from other side.
-//     → The paper gets pre-creased in alternating directions automatically.
-//
-//   The plates interlock at half the ridge pitch — mountain ridges from one plate
-//   nest into the valleys BETWEEN ridges on the other plate.
-//
-// GAP AT VERTICES: Where two crease lines intersect, the ridges must stop short
-//   by a small gap (vertexGap) so the paper can form a proper fold vertex
-//   without being blocked.
-//
-// RIDGE CROSS-SECTION: Flat-topped trapezoid (not sharp triangle).
-//   A flat top spreads the press force over a thin line without cutting paper.
-//   Top width ≈ 0.4mm, base width ≈ ridgeW, height = ridgeH.
-//
-// PRINT SETTINGS: Print with ridge side UP (no supports needed).
-//   Use 0.1mm layer height for smooth ridges.
-//   Material: PLA or PETG. Infill 40%+ for rigidity.
-//
-// USE: Lay Plate A flat (ridge face up). Place paper on top aligned to border marks.
-//   Place Plate B upside-down on top (ridge face down). Clamp or press firmly.
-//   Remove paper — all creases are now pre-set. Fold along them in correct direction.
 
 (function(){
   const ec=document.getElementById('canvasEnergy');
@@ -2643,7 +2560,7 @@ initRightPanelResize();
 applyAutoSeam();
 initFlatCanvasEvents();
 init3d();
-captureState(); // initial state for undo
+captureState();
 draw();
 </script>
 </body>
