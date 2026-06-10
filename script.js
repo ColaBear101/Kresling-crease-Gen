@@ -418,9 +418,10 @@ function computeGeometry(p){
   // c3d: 3D valley diagonal — sqrt(h² + 4R²sin²(π/n + phi0))
   const c3d=Math.sqrt(floor_h*floor_h+4*R*R*Math.pow(Math.sin(Math.PI/n+phi0),2));
   // Bistability criterion (Masana 2019 / Alipour 2023): two zero-energy states exist
-  // when the flat-foldable condition b3d ≤ 2R is met and h0/R < 2sin(π/n)
+  // when the flat-foldable condition b3d ≤ 2R is met and h0/R < 2sin(π/n).
+  // Use |dx| so condition holds for both angle < 90° (dx>0) and angle > 90° (dx<0).
   const flat_foldable=b3d<=2*R+1e-9;
-  const bistable=(h0r>0&&h0r<2*Math.sin(Math.PI/n)&&dx>0&&dx<b&&flat_foldable);
+  const bistable=(h0r>0&&h0r<2*Math.sin(Math.PI/n)+1e-9&&Math.abs(dx)>1e-9&&Math.abs(dx)<b&&flat_foldable);
   const valid=dx<b&&floor_h>0&&b>0;
   return{b,floor_h,dx,red_len,green_len,gr_angle,h0r,bistable,valid,R,green_dx,phi0,b3d,c3d};
 }
@@ -1136,17 +1137,23 @@ function drawEnergy(){
   }
 
   const STEPS=400;
-  const PHI_N=120;   // phi resolution for minimisation over rotation angle
+  const PHI_N=200;   // phi resolution for minimisation over rotation angle
   const energyPoints=[],heightPoints=[];
   let minE=Infinity,maxE=-Infinity;
 
+  // Phi scan range: [-π/2, π/2] covers all physically distinct sin²(φ) values.
+  // Critical: must include negative phi for Angle BR > 90° (phi0 < 0 in those cases).
+  const PHI_LO=-Math.PI/2, PHI_HI=Math.PI/2;
+
   for(let i=0;i<=STEPS;i++){
     const h=h_min+(i/STEPS)*(h_max-h_min);
-    // Minimise total energy over half-rotation angle φ ∈ [0, 2π/n]
-    // (full period of the n-fold symmetric structure)
     let minEi=Infinity;
+    // Include phi0 explicitly so the designed state reads exactly E=0
+    const phiCandidates=[phi0];
     for(let pi=0;pi<=PHI_N;pi++){
-      const phi=(pi/PHI_N)*(2*Math.PI/n);
+      phiCandidates.push(PHI_LO+(pi/PHI_N)*(PHI_HI-PHI_LO));
+    }
+    for(const phi of phiCandidates){
       const b_c=Math.sqrt(h*h+4*R*R*Math.sin(phi)*Math.sin(phi));
       const c_c=Math.sqrt(h*h+4*R*R*Math.pow(Math.sin(Math.PI/n+phi),2));
       const Ei=n*totalFloors*(k_m*(b_c-b0_3d)*(b_c-b0_3d)+k_v*(c_c-c0_3d)*(c_c-c0_3d))*0.5;
