@@ -396,35 +396,35 @@ function getP(){
 
 function computeGeometry(p){
   const{dia,height,n,floors,angle}=p, R=dia/2;
-  const b=(dia*Math.PI)/n, floor_h=height/floors;
+  // ── GEOMETRY FIX (Alipour & Arghavani 2023, Eq. 1) ──
+  // a₀ = polygon side length = chord 2R·sin(π/n), NOT arc 2πR/n.
+  // Arc overestimates side by π/(n·sin(π/n)): ~4.7% for n=6, ~20% for n=3.
+  const b=2*R*Math.sin(Math.PI/n);          // chord side a₀ — FIXED
+  const floor_h=height/floors;
   const theta=angle*Math.PI/180, dx=floor_h/Math.tan(theta);
-  const red_len=Math.hypot(dx,floor_h);
-  const green_dx=b+2*dx, green_len=Math.hypot(green_dx,floor_h);
-  const vg=[green_dx,floor_h],vr=[dx,floor_h];
+  // 2D flat-pattern crease lengths
+  const red_len=Math.hypot(2*dx,floor_h);   // mountain crease in 2D pattern — FIXED (was Math.hypot(dx,…))
+  const green_dx=b+2*dx, green_len=Math.hypot(green_dx,floor_h); // long valley diagonal 2D
+  // Angle between valley diagonal and mountain crease in 2D pattern
+  const vg=[green_dx,floor_h],vr=[2*dx,floor_h]; // FIXED: use 2·dx for mountain direction
   const gr_angle=Math.acos(Math.max(-1,Math.min(1,(vg[0]*vr[0]+vg[1]*vr[1])/(Math.hypot(...vg)*Math.hypot(...vr)))))*180/Math.PI;
   const h0r=floor_h/R;
-  const bistable=(h0r>0&&h0r<2*Math.sin(Math.PI/n)&&dx>0&&dx<b);
+  // ── 3D CREASE LENGTHS (Alipour 2023, Eqs. 3–4; Masana & Daqaq 2019) ──
+  // phi0 = half-rotation angle per floor; total ring-to-ring rotation = 2·phi0
+  // (bottom ring at −phi0, top ring at +phi0 in code convention)
+  const phi0=dx/R;   // designed half-rotation (linearisation dx≈R·phi0 for small angles)
+  // b3d: 3D mountain crease — sqrt(h² + 4R²sin²(phi0))
+  const b3d=Math.sqrt(floor_h*floor_h+4*R*R*Math.sin(phi0)*Math.sin(phi0));
+  // c3d: 3D valley diagonal — sqrt(h² + 4R²sin²(π/n + phi0))
+  const c3d=Math.sqrt(floor_h*floor_h+4*R*R*Math.pow(Math.sin(Math.PI/n+phi0),2));
+  // Bistability criterion (Masana 2019 / Alipour 2023): two zero-energy states exist
+  // when the flat-foldable condition b3d ≤ 2R is met and h0/R < 2sin(π/n)
+  const flat_foldable=b3d<=2*R+1e-9;
+  const bistable=(h0r>0&&h0r<2*Math.sin(Math.PI/n)&&dx>0&&dx<b&&flat_foldable);
   const valid=dx<b&&floor_h>0&&b>0;
-  return{b,floor_h,dx,red_len,green_len,gr_angle,h0r,bistable,valid,R,green_dx};
+  return{b,floor_h,dx,red_len,green_len,gr_angle,h0r,bistable,valid,R,green_dx,phi0,b3d,c3d};
 }
-
-function patternBounds(p,g){
-  const{n,floors,ext,seaml,seamr,extcols,stack,xoff=0,yoff=0}=p;
-  const{b,floor_h,dx}=g;
-  const totalFloors=floors*stack;
-  const col_min=-extcols,col_max=n+extcols;
-  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-  for(let f=0;f<=totalFloors;f++){
-    for(let col=col_min;col<=col_max;col++){
-      let x=col*b,y=f*floor_h;
-      if(f%2===1)x+=dx*p.chir;else x-=dx*p.chir;
-      if(x<minX)minX=x;if(x>maxX)maxX=x;
-      if(y<minY)minY=y;if(y>maxY)maxY=y;
-    }
-  }
-  minX-=seaml;maxX+=seamr;minY-=ext;maxY+=ext;
-  return{minX,maxX,minY,maxY,w:maxX-minX,h:maxY-minY};
-}
+// Note: duplicate non-memoised patternBounds removed — memoised version above is canonical.
 
 function updateStats(p,g){
   const bounds=patternBounds(p,g);
@@ -433,8 +433,10 @@ function updateStats(p,g){
   const fits=sW<=A4_W&&sH<=A4_H;
   document.getElementById('s-fh').textContent=g.floor_h.toFixed(3)+' cm';
   document.getElementById('s-b').textContent=g.b.toFixed(3)+' cm';
-  document.getElementById('s-red').textContent=g.red_len.toFixed(3)+' cm';
-  document.getElementById('s-green').textContent=g.green_len.toFixed(3)+' cm';
+  document.getElementById('s-red').textContent=g.b3d.toFixed(3)+' cm';    // 3D mountain crease
+  document.getElementById('s-green').textContent=g.c3d.toFixed(3)+' cm';  // 3D valley diagonal
+  const phi0El=document.getElementById('s-phi0');
+  if(phi0El)phi0El.textContent=(g.phi0*180/Math.PI).toFixed(2)+'°';
   document.getElementById('s-pw').textContent=bounds.w.toFixed(2)+' cm';
   document.getElementById('s-ph').textContent=bounds.h.toFixed(2)+' cm';
   document.getElementById('s-h0r').textContent=g.h0r.toFixed(4);
@@ -1113,66 +1115,51 @@ function drawEnergy(){
   ctx.fillStyle='#1a1d28';ctx.fillRect(0,0,W,H);
 
   const p=getP(),g=computeGeometry(p);
-  const{n,floors,stack,angle}=p;
-  const{floor_h,R,b,dx}=g;
+  const{n,floors,stack}=p;
+  const{floor_h,R,phi0,b3d:b0_3d,c3d:c0_3d}=g;
   const totalFloors=floors*stack;
 
-  const L_g0 = g.green_len;
-  const L_r0 = g.red_len;
+  // ── AXIAL TRUSS MODEL (Masana & Daqaq 2019 / Alipour & Arghavani 2023) ──
+  // Each crease is an axial spring with rest length from the designed geometry.
+  // Energy: E(h,φ) = n·[k_m·(b−b₀)² + k_v·(c−c₀)²] / 2   per floor
+  // where b = sqrt(h²+4R²sin²φ), c = sqrt(h²+4R²sin²(π/n+φ)), φ = half-rotation angle.
+  // Rest lengths b₀, c₀ from computeGeometry (designed state).
+  // Mountain creases are stiffer (valley fold) than diagonal valley creases.
+  const k_m=2.0, k_v=1.0;
 
-  const h_max = L_r0 * 0.999;
-  const h_min = L_r0 * 0.02;
-
-  const STEPS = 400;
-  const energyPoints=[], heightPoints=[];
-
-  function getDihedral(h){
-    if(h<=0||h>=L_r0)return null;
-    const dxH=Math.sqrt(Math.max(0,L_r0*L_r0-h*h));
-    const L_g_check=Math.sqrt((b+2*dxH)*(b+2*dxH)+h*h);
-    const phi=dxH/R;
-    const alpha=Math.PI/n;
-
-    const vsub=([ax,ay,az],[bx,by,bz])=>[ax-bx,ay-by,az-bz];
-    const vcross=([ax,ay,az],[bx,by,bz])=>[ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx];
-    const vdot=([ax,ay,az],[bx,by,bz])=>ax*bx+ay*by+az*bz;
-    const vnorm=v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};
-
-    const A=[R, 0, 0];
-    const B=[R*Math.cos(2*alpha), R*Math.sin(2*alpha), 0];
-    const C=[R*Math.cos(phi)*Math.cos(alpha)-R*Math.sin(phi)*Math.sin(alpha),
-             R*Math.cos(phi)*Math.sin(alpha)+R*Math.sin(phi)*Math.cos(alpha), h];
-    const D=[R*Math.cos(phi+2*alpha), R*Math.sin(phi+2*alpha), h];
-
-    const n1=vnorm(vcross(vsub(B,A),vsub(C,A)));
-    const n2=vnorm(vcross(vsub(C,A),vsub(D,A)));
-    const psi_m=Math.acos(Math.max(-1,Math.min(1,vdot(n1,n2))));
-    const n3=vnorm(vcross(vsub(C,B),vsub(A,B)));
-    const psi_v=Math.acos(Math.max(-1,Math.min(1,-vdot(n1,n3))));
-    return{psi_m,psi_v,dxH,L_g:L_g_check};
+  // Physical height range: 0→ mountain crease limit (b₀ = inextensible limit)
+  const h_max=b0_3d*0.998;
+  const h_min=b0_3d*0.015;
+  if(h_max<=h_min||!isFinite(b0_3d)||b0_3d<=0){
+    ctx.fillStyle='#f87171';ctx.font='12px monospace';
+    ctx.fillText('Cannot compute energy: invalid geometry',20,H/2);return;
   }
 
-  const restAngles=getDihedral(floor_h);
-  if(!restAngles){ctx.fillStyle='#f87171';ctx.font='12px monospace';ctx.fillText('Cannot compute energy: invalid geometry',20,H/2);return;}
-  const{psi_m:psi_m0,psi_v:psi_v0}=restAngles;
-
-  const k_m=2.0,k_v=1.0;
+  const STEPS=400;
+  const PHI_N=120;   // phi resolution for minimisation over rotation angle
+  const energyPoints=[],heightPoints=[];
   let minE=Infinity,maxE=-Infinity;
 
   for(let i=0;i<=STEPS;i++){
     const h=h_min+(i/STEPS)*(h_max-h_min);
-    const angles=getDihedral(h);
-    if(!angles){energyPoints.push(0);heightPoints.push(h*totalFloors);continue;}
-    const{psi_m,psi_v}=angles;
-    const dm=psi_m-psi_m0,dv=psi_v-psi_v0;
-    const E=(k_m*dm*dm+k_v*dv*dv)*n*totalFloors;
-    energyPoints.push(E);
+    // Minimise total energy over half-rotation angle φ ∈ [0, 2π/n]
+    // (full period of the n-fold symmetric structure)
+    let minEi=Infinity;
+    for(let pi=0;pi<=PHI_N;pi++){
+      const phi=(pi/PHI_N)*(2*Math.PI/n);
+      const b_c=Math.sqrt(h*h+4*R*R*Math.sin(phi)*Math.sin(phi));
+      const c_c=Math.sqrt(h*h+4*R*R*Math.pow(Math.sin(Math.PI/n+phi),2));
+      const Ei=n*totalFloors*(k_m*(b_c-b0_3d)*(b_c-b0_3d)+k_v*(c_c-c0_3d)*(c_c-c0_3d))*0.5;
+      if(Ei<minEi)minEi=Ei;
+    }
+    energyPoints.push(minEi);
     heightPoints.push(h*totalFloors);
-    if(E<minE)minE=E;if(E>maxE)maxE=E;
+    if(minEi<minE)minE=minEi;
+    if(minEi>maxE)maxE=minEi;
   }
 
-  const localMinima=[];
   const WINDOW=8;
+  const localMinima=[];
   for(let i=WINDOW;i<energyPoints.length-WINDOW;i++){
     let isMin=true;
     for(let j=i-WINDOW;j<=i+WINDOW;j++){if(j!==i&&energyPoints[j]<=energyPoints[i]){isMin=false;break;}}
@@ -1189,9 +1176,9 @@ function drawEnergy(){
   if(energyPoints[STEPS]<energyPoints[STEPS-WINDOW])endpointMinima.push({idx:STEPS,h:heightPoints[STEPS],E:energyPoints[STEPS],label:'Extended'});
 
   const allMinima=[...endpointMinima,...mergedMinima];
+  // Bistable: two distinct energy wells (≥1 interior minimum + designed-state well)
   const trulBistable=mergedMinima.length>=1&&(endpointMinima.length>=1||mergedMinima.length>=2);
-  const geomBistable=g.bistable;
-  const isBistable=trulBistable&&geomBistable;
+  const isBistable=trulBistable&&g.bistable;
 
   const PAD={l:52,r:16,t:36,b:48};
   const gW=W-PAD.l-PAD.r,gH=H-PAD.t-PAD.b;
@@ -1252,7 +1239,7 @@ function drawEnergy(){
   ctx.fillText(`E=${curE.toFixed(4)}`,cx2+(cx2+80>W-PAD.r?-8:8),cy2+9);
 
   ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
-  ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm`,PAD.l,PAD.t-18);
+  ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm  [truss model]`,PAD.l,PAD.t-18);
   if(isBistable){
     ctx.fillStyle='#4ade80';ctx.font='9px "JetBrains Mono",monospace';ctx.textAlign='right';
     ctx.fillText('BISTABLE — two energy wells',PAD.l+gW,PAD.t-18);
@@ -1329,10 +1316,10 @@ function infoBoxLines(p, g, bounds){
   const totalLen=(p.dia*Math.PI).toFixed(3);
   const left=[
     `Floor height: ${g.floor_h.toFixed(2)} cm`,
-    `One side: ${g.b.toFixed(3)} cm`,
-    `Red line: ${g.red_len.toFixed(2)} cm`,
+    `a\u2080 (side): ${g.b.toFixed(3)} cm`,
+    `b\u2083d (mtn): ${g.b3d.toFixed(2)} cm`,
     `Blue-Red Angle: ${p.angle.toFixed(1)}\u00b0`,
-    `Green-Red angle: ${g.gr_angle.toFixed(2)}\u00b0`,
+    `\u03c6\u2080 (rot/floor): ${(g.phi0*180/Math.PI).toFixed(2)}\u00b0`,
     `h0/R: ${g.h0r.toFixed(4)}`,
     `Bistable: ${g.bistable?'yes':'no'}`,
   ];
