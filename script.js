@@ -403,26 +403,31 @@ function computeGeometry(p){
   const floor_h=height/floors;
   const theta=angle*Math.PI/180, dx=floor_h/Math.tan(theta);
   // 2D flat-pattern crease lengths
-  const red_len=Math.hypot(2*dx,floor_h);   // mountain crease in 2D pattern — FIXED (was Math.hypot(dx,…))
-  const green_dx=b+2*dx, green_len=Math.hypot(green_dx,floor_h); // long valley diagonal 2D
-  // Angle between valley diagonal and mountain crease in 2D pattern
-  const vg=[green_dx,floor_h],vr=[2*dx,floor_h]; // FIXED: use 2·dx for mountain direction
+  // The drawn valley (green) crease connects vertex (col+1, even floor) → (col, odd floor),
+  // spanning  b − 2·dx  horizontally in both positive and negative dx cases.
+  const red_len=Math.hypot(2*dx,floor_h);            // mountain crease 2D length
+  const green_dx=b-2*dx;                              // valley crease 2D horizontal span — FIXED (was b+2*dx)
+  const green_len=Math.hypot(green_dx,floor_h);       // valley crease 2D length
+  // Angle between valley diagonal and mountain crease in 2D flat pattern (not displayed, kept for reference)
+  const vg=[green_dx,floor_h],vr=[2*dx,floor_h];
   const gr_angle=Math.acos(Math.max(-1,Math.min(1,(vg[0]*vr[0]+vg[1]*vr[1])/(Math.hypot(...vg)*Math.hypot(...vr)))))*180/Math.PI;
   const h0r=floor_h/R;
-  // ── 3D CREASE LENGTHS (Alipour 2023, Eqs. 3–4; Masana & Daqaq 2019) ──
-  // phi0 = half-rotation angle per floor; total ring-to-ring rotation = 2·phi0
-  // (bottom ring at −phi0, top ring at +phi0 in code convention)
-  const phi0=dx/R;   // designed half-rotation (linearisation dx≈R·phi0 for small angles)
-  // b3d: 3D mountain crease — sqrt(h² + 4R²sin²(phi0))
+  // ── 3D CREASE LENGTHS (Alipour & Arghavani 2023, Eqs. 3–4) ──
+  // phi0 = half-rotation angle per floor; total ring-to-ring rotation = 2·phi0.
+  // Bottom ring at −phi0, top ring at +phi0 in code convention.
+  // phi0 < 0 when Angle BR > 90° (standard bistable preset range).
+  const phi0=dx/R;
+  // b3d: mountain crease 3D length — angular separation = 2·phi0 between consecutive rings
   const b3d=Math.sqrt(floor_h*floor_h+4*R*R*Math.sin(phi0)*Math.sin(phi0));
-  // c3d: 3D valley diagonal — sqrt(h² + 4R²sin²(π/n + phi0))
-  const c3d=Math.sqrt(floor_h*floor_h+4*R*R*Math.pow(Math.sin(Math.PI/n+phi0),2));
-  // Bistability criterion (Masana 2019 / Alipour 2023): two zero-energy states exist
-  // when the flat-foldable condition b3d ≤ 2R is met and h0/R < 2sin(π/n).
-  // Use |dx| so condition holds for both angle < 90° (dx>0) and angle > 90° (dx<0).
+  // c3d: valley diagonal 3D length — angular separation = 2(π/n − phi0) for the drawn "/" crease.
+  // Formula: sqrt(h² + 4R²·sin²(π/n − phi0)).
+  // Note: for phi0 < 0 (angle > 90°) this correctly gives c3d > b3d (valley > mountain). ✓
+  const c3d=Math.sqrt(floor_h*floor_h+4*R*R*Math.pow(Math.sin(Math.PI/n-phi0),2)); // FIXED: − not +
+  // Bistability (Masana 2019 / Alipour 2023): flat-foldable + h0/R in valid range.
+  // Math.abs(dx) handles both angle < 90° (dx>0) and angle > 90° (dx<0).
   const flat_foldable=b3d<=2*R+1e-9;
   const bistable=(h0r>0&&h0r<2*Math.sin(Math.PI/n)+1e-9&&Math.abs(dx)>1e-9&&Math.abs(dx)<b&&flat_foldable);
-  const valid=dx<b&&floor_h>0&&b>0;
+  const valid=Math.abs(dx)<b&&floor_h>0&&b>0;        // FIXED: |dx| not dx (handles negative dx)
   return{b,floor_h,dx,red_len,green_len,gr_angle,h0r,bistable,valid,R,green_dx,phi0,b3d,c3d};
 }
 // Note: duplicate non-memoised patternBounds removed — memoised version above is canonical.
@@ -437,7 +442,7 @@ function updateStats(p,g){
   document.getElementById('s-red').textContent=g.b3d.toFixed(3)+' cm';    // 3D mountain crease
   document.getElementById('s-green').textContent=g.c3d.toFixed(3)+' cm';  // 3D valley diagonal
   const phi0El=document.getElementById('s-phi0');
-  if(phi0El)phi0El.textContent=(g.phi0*180/Math.PI).toFixed(2)+'°';
+  if(phi0El)phi0El.textContent=(Math.abs(g.phi0)*180/Math.PI).toFixed(2)+'°';
   document.getElementById('s-pw').textContent=bounds.w.toFixed(2)+' cm';
   document.getElementById('s-ph').textContent=bounds.h.toFixed(2)+' cm';
   document.getElementById('s-h0r').textContent=g.h0r.toFixed(4);
@@ -1155,7 +1160,7 @@ function drawEnergy(){
     }
     for(const phi of phiCandidates){
       const b_c=Math.sqrt(h*h+4*R*R*Math.sin(phi)*Math.sin(phi));
-      const c_c=Math.sqrt(h*h+4*R*R*Math.pow(Math.sin(Math.PI/n+phi),2));
+      const c_c=Math.sqrt(h*h+4*R*R*Math.pow(Math.sin(Math.PI/n-phi),2)); // FIXED: − matches c3d
       const Ei=n*totalFloors*(k_m*(b_c-b0_3d)*(b_c-b0_3d)+k_v*(c_c-c0_3d)*(c_c-c0_3d))*0.5;
       if(Ei<minEi)minEi=Ei;
     }
@@ -1326,7 +1331,7 @@ function infoBoxLines(p, g, bounds){
     `a\u2080 (side): ${g.b.toFixed(3)} cm`,
     `b\u2083d (mtn): ${g.b3d.toFixed(2)} cm`,
     `Blue-Red Angle: ${p.angle.toFixed(1)}\u00b0`,
-    `\u03c6\u2080 (rot/floor): ${(g.phi0*180/Math.PI).toFixed(2)}\u00b0`,
+    `\u03c6\u2080 (rot/floor): ${(Math.abs(g.phi0)*180/Math.PI).toFixed(2)}\u00b0`,
     `h0/R: ${g.h0r.toFixed(4)}`,
     `Bistable: ${g.bistable?'yes':'no'}`,
   ];
