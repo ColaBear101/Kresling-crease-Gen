@@ -396,41 +396,40 @@ function getP(){
 
 function computeGeometry(p){
   const{dia,height,n,floors,angle}=p, R=dia/2;
-  // ── GEOMETRY FIX (Alipour & Arghavani 2023, Eq. 1) ──
-  // a₀ = polygon side length = chord 2R·sin(π/n), NOT arc 2πR/n.
-  // Arc overestimates side by π/(n·sin(π/n)): ~4.7% for n=6, ~20% for n=3.
-  const b=2*R*Math.sin(Math.PI/n);          // chord side a₀ — FIXED
-  const floor_h=height/floors;
+  const b=(dia*Math.PI)/n, floor_h=height/floors;
   const theta=angle*Math.PI/180, dx=floor_h/Math.tan(theta);
-  // 2D flat-pattern crease lengths
-  // The drawn valley (green) crease connects vertex (col+1, even floor) → (col, odd floor),
-  // spanning  b − 2·dx  horizontally in both positive and negative dx cases.
-  const red_len=Math.hypot(2*dx,floor_h);            // mountain crease 2D length
-  const green_dx=b-2*dx;                              // valley crease 2D horizontal span — FIXED (was b+2*dx)
-  const green_len=Math.hypot(green_dx,floor_h);       // valley crease 2D length
-  // Angle between valley diagonal and mountain crease in 2D flat pattern (not displayed, kept for reference)
-  const vg=[green_dx,floor_h],vr=[2*dx,floor_h];
+  const red_len=Math.hypot(dx,floor_h);
+  const green_dx=b+2*dx, green_len=Math.hypot(green_dx,floor_h);
+  const vg=[green_dx,floor_h],vr=[dx,floor_h];
   const gr_angle=Math.acos(Math.max(-1,Math.min(1,(vg[0]*vr[0]+vg[1]*vr[1])/(Math.hypot(...vg)*Math.hypot(...vr)))))*180/Math.PI;
   const h0r=floor_h/R;
-  // ── 3D CREASE LENGTHS (Alipour & Arghavani 2023, Eqs. 3–4) ──
-  // phi0 = half-rotation angle per floor; total ring-to-ring rotation = 2·phi0.
-  // Bottom ring at −phi0, top ring at +phi0 in code convention.
-  // phi0 < 0 when Angle BR > 90° (standard bistable preset range).
-  const phi0=dx/R;
-  // b3d: mountain crease 3D length — angular separation = 2·phi0 between consecutive rings
-  const b3d=Math.sqrt(floor_h*floor_h+4*R*R*Math.sin(phi0)*Math.sin(phi0));
-  // c3d: valley diagonal 3D length — angular separation = 2(π/n − phi0) for the drawn "/" crease.
-  // Formula: sqrt(h² + 4R²·sin²(π/n − phi0)).
-  // Note: for phi0 < 0 (angle > 90°) this correctly gives c3d > b3d (valley > mountain). ✓
-  const c3d=Math.sqrt(floor_h*floor_h+4*R*R*Math.pow(Math.sin(Math.PI/n-phi0),2)); // FIXED: − not +
-  // Bistability (Masana 2019 / Alipour 2023): flat-foldable + h0/R in valid range.
-  // Math.abs(dx) handles both angle < 90° (dx>0) and angle > 90° (dx<0).
-  const flat_foldable=b3d<=2*R+1e-9;
-  const bistable=(h0r>0&&h0r<2*Math.sin(Math.PI/n)+1e-9&&Math.abs(dx)>1e-9&&Math.abs(dx)<b&&flat_foldable);
-  const valid=Math.abs(dx)<b&&floor_h>0&&b>0;        // FIXED: |dx| not dx (handles negative dx)
-  return{b,floor_h,dx,red_len,green_len,gr_angle,h0r,bistable,valid,R,green_dx,phi0,b3d,c3d};
+  // Correct bistability condition based on Kresling geometry:
+  // bistable when the crease pattern produces two distinct stable states
+  // Condition: the diagonal (green) crease length must equal the side (blue) length
+  // when compressed — which happens when h0r satisfies the geometric closure condition.
+  // Using the proper criterion: bistable iff 0 < h0r < 2*sin(π/n) AND dx > 0
+  const bistable=(h0r>0&&h0r<2*Math.sin(Math.PI/n)&&dx>0&&dx<b);
+  const valid=dx<b&&floor_h>0&&b>0;
+  return{b,floor_h,dx,red_len,green_len,gr_angle,h0r,bistable,valid,R,green_dx};
 }
-// Note: duplicate non-memoised patternBounds removed — memoised version above is canonical.
+
+function patternBounds(p,g){
+  const{n,floors,ext,seaml,seamr,extcols,stack,xoff=0,yoff=0}=p;
+  const{b,floor_h,dx}=g;
+  const totalFloors=floors*stack;
+  const col_min=-extcols,col_max=n+extcols;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(let f=0;f<=totalFloors;f++){
+    for(let col=col_min;col<=col_max;col++){
+      let x=col*b,y=f*floor_h;
+      if(f%2===1)x+=dx*p.chir;else x-=dx*p.chir;
+      if(x<minX)minX=x;if(x>maxX)maxX=x;
+      if(y<minY)minY=y;if(y>maxY)maxY=y;
+    }
+  }
+  minX-=seaml;maxX+=seamr;minY-=ext;maxY+=ext;
+  return{minX,maxX,minY,maxY,w:maxX-minX,h:maxY-minY};
+}
 
 function updateStats(p,g){
   const bounds=patternBounds(p,g);
@@ -439,10 +438,8 @@ function updateStats(p,g){
   const fits=sW<=A4_W&&sH<=A4_H;
   document.getElementById('s-fh').textContent=g.floor_h.toFixed(3)+' cm';
   document.getElementById('s-b').textContent=g.b.toFixed(3)+' cm';
-  document.getElementById('s-red').textContent=g.b3d.toFixed(3)+' cm';    // 3D mountain crease
-  document.getElementById('s-green').textContent=g.c3d.toFixed(3)+' cm';  // 3D valley diagonal
-  const phi0El=document.getElementById('s-phi0');
-  if(phi0El)phi0El.textContent=(Math.abs(g.phi0)*180/Math.PI).toFixed(2)+'°';
+  document.getElementById('s-red').textContent=g.red_len.toFixed(3)+' cm';
+  document.getElementById('s-green').textContent=g.green_len.toFixed(3)+' cm';
   document.getElementById('s-pw').textContent=bounds.w.toFixed(2)+' cm';
   document.getElementById('s-ph').textContent=bounds.h.toFixed(2)+' cm';
   document.getElementById('s-h0r').textContent=g.h0r.toFixed(4);
@@ -458,7 +455,9 @@ function updateStats(p,g){
 
 function autoFitA4(){
   const p=getP(),g=computeGeometry(p),bounds=patternBounds(p,g);
-  const labelMarginCm=1.2;
+  // The pattern itself (cut border + seams) must fit inside A4.
+  // We add a small margin so dimension labels outside the border don't clip.
+  const labelMarginCm=1.2; // cm reserved on each side for dimension text
   const usableW=A4_W-labelMarginCm*2;
   const usableH=A4_H-labelMarginCm*2;
   const ms=Math.min(usableW/bounds.w, usableH/bounds.h)*100;
@@ -473,6 +472,7 @@ function resetDefaults(){
 }
 
 // ─── BUILD VERTICES (shared by flat draw and exports) ───
+// Returns vertices in cm space, centered within A4
 function buildVerts(p,g,forExport){
   const{n,floors,ext,seaml,seamr,extcols,stack,scale,chir}=p;
   const{b,floor_h,dx}=g;
@@ -480,14 +480,18 @@ function buildVerts(p,g,forExport){
   const totalFloors=floors*stack;
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale,scaledH=bounds.h*scale;
+
+  // Pattern origin: centered in A4 (in cm)
   const patOriginX=(A4_W-scaledW)/2;
   const patOriginY=(A4_H-scaledH)/2;
+
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
     for(let col=col_min;col<=col_max;col++){
       let x=col*b,y=f*floor_h;
       if(f%2===1)x+=dx*chir;else x-=dx*chir;
+      // normalize to pattern's bottom-left then scale and center in A4
       const nx=(x-bounds.minX)*scale+patOriginX;
       const ny=(y-bounds.minY)*scale+patOriginY;
       row.push([nx,ny]);
@@ -515,15 +519,19 @@ function drawFlat(){
   const bounds=patternBounds(p,g);
   const scaledPatW=bounds.w*scale,scaledPatH=bounds.h*scale;
 
+  // Base transform: fit A4 + margin in canvas, then apply zoom/pan on top
   const margin_cm=1.5;
   const sceneW=A4_W+margin_cm*2,sceneH=A4_H+margin_cm*2;
-  const sc0=Math.min((W-20)/sceneW,(H-20)/sceneH);
+  const sc0=Math.min((W-20)/sceneW,(H-20)/sceneH); // base scale (zoom=1)
   const sc=sc0*flatZoom;
+  // base origin (zoom=1 centered)
   const ox0=W/2-sceneW*sc0/2, oy0=H/2-sceneH*sc0/2;
+  // panned/zoomed origin
   const ox=ox0*flatZoom+flatPanX, oy=oy0*flatZoom+flatPanY;
 
   function toC(xcm,ycm){return[ox+(xcm+margin_cm)*sc, oy+(sceneH-ycm-margin_cm)*sc];}
 
+  // Grid
   if(showGrid){
     ctx.save();ctx.strokeStyle='rgba(59,130,246,0.07)';ctx.lineWidth=0.5;
     for(let x=0;x<=A4_W;x++){const[cx,cy]=toC(x,0),[cx2,cy2]=toC(x,A4_H);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx2,cy2);ctx.stroke();}
@@ -531,6 +539,7 @@ function drawFlat(){
     ctx.restore();
   }
 
+  // A4 frame (shading outside)
   const[a4x,a4y]=toC(0,A4_H),[a4x2,a4y2]=toC(A4_W,0);
   ctx.fillStyle='rgba(0,0,0,0.25)';
   ctx.fillRect(0,0,W,a4y);ctx.fillRect(0,a4y2,W,H-a4y2);
@@ -542,13 +551,16 @@ function drawFlat(){
     ctx.fillText('A4  21×29.7 cm',a4x+4,a4y+12);ctx.restore();
   }
 
+  // Rulers — tick marks on A4 left and bottom edges
   ctx.save();ctx.fillStyle='rgba(200,210,255,0.45)';ctx.strokeStyle='rgba(200,210,255,0.35)';ctx.lineWidth=0.7;ctx.font='7px "JetBrains Mono",monospace';ctx.textAlign='center';
+  // Bottom ruler (X axis)
   for(let x=0;x<=A4_W;x++){
     const[rx,ry]=toC(x,0);
     const major=x%5===0;const tickH=major?8:4;
     ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(rx,ry+tickH);ctx.stroke();
     if(major&&x>0){ctx.fillText(x+'cm',rx,ry+18);}
   }
+  // Left ruler (Y axis)
   ctx.textAlign='right';
   for(let y=0;y<=A4_H;y++){
     const[rx,ry]=toC(0,y);
@@ -585,14 +597,18 @@ function drawFlat(){
     ctx.strokeStyle=col;ctx.lineWidth=lw||1.2;ctx.setLineDash(dash||[]);ctx.stroke();ctx.setLineDash([]);
   }
 
+  // Purple cut box
   const purp='#9f6fdf';
   line(x0,topY,x0,botY,purp,1.8);line(x1,topY,x1,botY,purp,1.8);
   line(x0,topY,x1,topY,purp,1.8);line(x2,botY,x3,botY,purp,1.8);
   if(seamlS>0){line(seamLX,topY,seamLX,botY,'slateblue',1.2,[4,3]);[topY,botY,y0,y2].forEach(yy=>line(seamLX,yy,x0,yy,'slateblue',1.2,[4,3]));}
   if(seamrS>0){line(seamRX,topY,seamRX,botY,'slateblue',1.2,[4,3]);[topY,botY,y1,y3].forEach(yy=>line(x1,yy,seamRX,yy,'slateblue',1.2,[4,3]));}
 
+  // Info box in BOTTOM gap: between floor-0 line (y0) and bottom purple border (topY)
+  // y0 > topY in cm (topY = y0 - extS is lower on page)
   drawInfoBoxCanvas(ctx, toC, sc, x0, x1, y0, topY, p, g, bounds);
 
+  // Red mountain zigzags
   for(let ci=1;ci<total_cols-1;ci++){
     ctx.beginPath();
     for(let f=0;f<=totalFloors;f++){const[vx,vy]=verts[f][ci],[cx,cy]=toC(vx,vy);f===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);}
@@ -605,12 +621,14 @@ function drawFlat(){
   ctx.beginPath();lPts.forEach(([vx,vy],i)=>{const[cx,cy]=toC(vx,vy);i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);});
   ctx.strokeStyle='#e05252';ctx.lineWidth=1.1;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
 
+  // Blue valley horizontals
   for(let f=0;f<=totalFloors;f++){
     const yL=verts[f][0][1];
     const[lx,ly]=toC(seamLX,yL),[rx,ry]=toC(seamRX,yL);
     ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(rx,ry);ctx.strokeStyle='#378ADD';ctx.lineWidth=1.3;ctx.setLineDash([]);ctx.stroke();
   }
 
+  // Green diagonals
   ctx.strokeStyle='#3dba6e';ctx.lineWidth=1.0;ctx.setLineDash([5,4]);
   for(let f=0;f<totalFloors;f++){
     for(let ci=0;ci<total_cols-1;ci++){
@@ -622,30 +640,37 @@ function drawFlat(){
   }
   ctx.setLineDash([]);
 
+  // Dimension labels
   ctx.save();ctx.fillStyle='rgba(180,220,255,0.55)';ctx.font='9px "JetBrains Mono",monospace';
   const[lx0,ly0]=toC(x0-seamlS,topY-0.3),[rx0]=toC(x1+seamrS,topY-0.3);
   ctx.fillText(`W=${(bounds.w*scale).toFixed(1)}cm`,(lx0+rx0)/2-18,ly0-3);
   const[hx0,hy0]=toC(x1+seamrS+0.25,botY),[,hy1]=toC(x1+seamrS+0.25,topY);
   ctx.fillText(`H=${(bounds.h*scale).toFixed(1)}cm`,hx0+3,(hy0+hy1)/2);ctx.restore();
 
+  // ── HOVER CROSSHAIR + NEAREST CREASE HIGHLIGHT ──
   if(flatHoverPx){
     const{x:hpx,y:hpy}=flatHoverPx;
+    // Convert canvas px → cm
     const hcm_x=(hpx-ox)/sc - margin_cm;
     const hcm_y=sceneH - (hpy-oy)/sc - margin_cm;
 
+    // Draw crosshair
     ctx.save();
     ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=0.8;ctx.setLineDash([4,4]);
     ctx.beginPath();ctx.moveTo(hpx,0);ctx.lineTo(hpx,H);ctx.stroke();
     ctx.beginPath();ctx.moveTo(0,hpy);ctx.lineTo(W,hpy);ctx.stroke();
     ctx.setLineDash([]);
 
+    // Nearest crease highlight
     const nc=getNearestCrease(hpx,hpy,verts,p,g,toC);
     const creaseColors={blue:'#60c8ff',red:'#ff8080',green:'#80ffb0'};
     if(nc.type){
       ctx.strokeStyle=creaseColors[nc.type]||'#fff';
       ctx.lineWidth=2.5;ctx.globalAlpha=0.85;
+      // Draw a small highlight ring on the hit point (approx)
     }
 
+    // Coordinate tooltip
     const lines=[`x = ${hcm_x.toFixed(2)} cm`, `y = ${hcm_y.toFixed(2)} cm`];
     if(nc.type) lines.push(nc.label);
     const tfs=9,tlh=12,tPad=5,tW=130,tH=lines.length*tlh+tPad*2;
@@ -672,6 +697,7 @@ function drawFlat(){
 function initFlatCanvasEvents(){
   const canvas=document.getElementById('flatCanvas');
 
+  // Zoom with wheel — zoom toward cursor, scroll out resets to default
   canvas.addEventListener('wheel',e=>{
     e.preventDefault();
     const rect=canvas.getBoundingClientRect();
@@ -679,8 +705,10 @@ function initFlatCanvasEvents(){
     const delta=e.deltaY<0?1.12:1/1.12;
     const newZoom=flatZoom*delta;
     if(newZoom<=1.0){
+      // reset to default
       flatZoom=1; flatPanX=0; flatPanY=0;
     } else {
+      // zoom toward mouse position
       flatPanX=(flatPanX-mx)*delta+mx;
       flatPanY=(flatPanY-my)*delta+my;
       flatZoom=Math.min(newZoom,20);
@@ -688,6 +716,7 @@ function initFlatCanvasEvents(){
     drawFlat();
   },{passive:false});
 
+  // Pan with mouse drag
   canvas.addEventListener('mousedown',e=>{
     if(e.button===0){flatDragging=true;flatLastMouse={x:e.clientX,y:e.clientY};canvas.style.cursor='grabbing';}
   });
@@ -699,8 +728,10 @@ function initFlatCanvasEvents(){
     flatLastMouse={x:e.clientX,y:e.clientY};
     drawFlat();
   });
+  // Double-click to reset zoom
   canvas.addEventListener('dblclick',()=>{flatZoom=1;flatPanX=0;flatPanY=0;drawFlat();});
 
+  // Hover crosshair tracking
   canvas.addEventListener('mousemove',e=>{
     const rect=canvas.getBoundingClientRect();
     flatHoverPx={x:(e.clientX-rect.left)*(canvas.width/rect.width), y:(e.clientY-rect.top)*(canvas.height/rect.height)};
@@ -767,6 +798,10 @@ function _fsChange(){
 function drawPanel(){draw3d();drawEnergy();}
 
 // ─── MOLD 3D PREVIEW ───
+// Renders an interactive 3D perspective view of the flat press mold.
+// Shows the base plate as a solid slab with ridge lines on top.
+// Mountain mold = red ridges, Valley mold = blue+green ridges.
+// "Both exploded" = two molds separated by a gap with paper plane between.
 let moldRotX=0.3, moldRotY=0.5, moldDragging=false, moldLastMouse={x:0,y:0}, moldCamDist=null;
 
 function initMold3d(){
@@ -799,6 +834,7 @@ function initMold3d(){
 function drawMold3d(){
   const canvas=document.getElementById('canvasMold');
   if(!canvas)return;
+  // Resize canvas to match its container if needed
   const wrap=document.getElementById('center-pane-mold');
   if(wrap){
     const rect=wrap.getBoundingClientRect();
@@ -823,6 +859,7 @@ function drawMold3d(){
   const ridgeH=(p.ridgeh||1.2)/10;
   const margin=0.2;
 
+  // Rebuild 2D verts
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -840,11 +877,15 @@ function drawMold3d(){
   const topY=y0-extS, botY=y3+extS;
   const seamLX=x0-seamlS, seamRX=x1+seamrS;
 
+  // Plate corners (3D): X = pattern X, Z = pattern Y (flat), Y = up
   const pw=seamRX-seamLX+margin*2, ph=botY-topY+margin*2;
   const px0=seamLX-margin, pz0=topY-margin;
+
+  // Center the model at origin for rotation
   const cx_=px0+pw/2, cz_=pz0+ph/2;
   const moldGap=currentMoldTab==='both'?baseT*2+0.3:0;
 
+  // Rotation helpers (same as draw3d)
   const cxr=Math.cos(moldRotX),sxr=Math.sin(moldRotX);
   const cyr=Math.cos(moldRotY),syr=Math.sin(moldRotY);
   function rotate([x,y,z]){
@@ -864,6 +905,7 @@ function drawMold3d(){
     return[cxc+rx*sc, cyc-ry*sc, zd];
   }
 
+  // Collect draw calls: faces (filled quads) and lines
   const drawCalls=[];
 
   function addFace(pts3d, color, alpha){
@@ -879,24 +921,30 @@ function drawMold3d(){
     drawCalls.push({type:'line',pa,pb,color,lw,dash,z});
   }
 
+  // Draw a mold (base plate + ridges) at vertical offset yOff
+  // ridgeSegs: array of [[ax,ay],[bx,by]] in pattern 2D
+  // color scheme: plateColor, ridgeColor
   function drawMold(yOff, ridgeSegs, plateCol, ridgeCol, label){
     const yBot=yOff-baseT, yTop=yOff;
     const bx0=seamLX-margin, bx1=seamRX+margin;
     const bz0=topY-margin, bz1=botY+margin;
 
+    // Base plate — 6 faces
     const corners={
       tl0:[bx0,yBot,bz0],tr0:[bx1,yBot,bz0],tl1:[bx0,yBot,bz1],tr1:[bx1,yBot,bz1],
       bl0:[bx0,yTop,bz0],br0:[bx1,yTop,bz0],bl1:[bx0,yTop,bz1],br1:[bx1,yTop,bz1],
     };
-    addFace([corners.bl0,corners.br0,corners.br1,corners.bl1],plateCol,0.82);
-    addFace([corners.tl0,corners.tl1,corners.tr1,corners.tr0],plateCol,0.45);
-    addFace([corners.tl0,corners.bl0,corners.bl1,corners.tl1],plateCol,0.55);
-    addFace([corners.tr0,corners.tr1,corners.br1,corners.br0],plateCol,0.55);
-    addFace([corners.tl0,corners.tr0,corners.br0,corners.bl0],plateCol,0.60);
-    addFace([corners.tl1,corners.bl1,corners.br1,corners.tr1],plateCol,0.60);
+    addFace([corners.bl0,corners.br0,corners.br1,corners.bl1],plateCol,0.82); // top
+    addFace([corners.tl0,corners.tl1,corners.tr1,corners.tr0],plateCol,0.45); // bottom
+    addFace([corners.tl0,corners.bl0,corners.bl1,corners.tl1],plateCol,0.55); // front -X
+    addFace([corners.tr0,corners.tr1,corners.br1,corners.br0],plateCol,0.55); // back +X
+    addFace([corners.tl0,corners.tr0,corners.br0,corners.bl0],plateCol,0.60); // left -Z
+    addFace([corners.tl1,corners.bl1,corners.br1,corners.tr1],plateCol,0.60); // right +Z
 
+    // Plate outline
     [[corners.bl0,corners.br0],[corners.br0,corners.br1],[corners.br1,corners.bl1],[corners.bl1,corners.bl0]].forEach(([a,b])=>addLine(a,b,'rgba(255,255,255,0.15)',0.8));
 
+    // Ridges — draw as lines with glow effect
     for(const[[ax,ay],[bx_,by_]] of ridgeSegs){
       const a3=[ax,yTop,ay], b3=[bx_,yTop,by_];
       const ap=[ax,yTop+ridgeH,ay], bp=[bx_,yTop+ridgeH,by_];
@@ -906,10 +954,12 @@ function drawMold3d(){
       addLine(b3,bp,ridgeCol,1.2);
     }
 
+    // Label at plate center
     const labelPt=project([cx_,yTop+ridgeH+0.2,cz_]);
     if(labelPt) drawCalls.push({type:'label',pt:labelPt,text:label,z:labelPt[2]});
   }
 
+  // Collect ridge segments for each type
   const mountainSegs=[];
   for(let ci=1;ci<total_cols-1;ci++)
     for(let f=0;f<totalFloors;f++)
@@ -931,7 +981,9 @@ function drawMold3d(){
   } else if(currentMoldTab==='valley'){
     drawMold(0, valleySegs, plateBase, valRidge, 'Valley mold');
   } else {
+    // Both: valley mold below (yOff=-moldGap), paper in middle, mountain mold above
     drawMold(moldGap+baseT, mountainSegs, '#253040', mtnRidge, 'Mountain mold (top)');
+    // Paper plane in middle
     const py=moldGap/2;
     const paperAlpha=0.22;
     addFace([[seamLX-margin,py,topY-margin],[seamRX+margin,py,topY-margin],[seamRX+margin,py,botY+margin],[seamLX-margin,py,botY+margin]],'#ffffff',paperAlpha);
@@ -944,6 +996,7 @@ function drawMold3d(){
     drawMold(0, valleySegs, '#253040', valRidge, 'Valley mold (bottom)');
   }
 
+  // Sort back-to-front and draw
   drawCalls.sort((a,b)=>b.z-a.z);
   for(const dc of drawCalls){
     if(dc.type==='face'){
@@ -951,6 +1004,7 @@ function drawMold3d(){
       ctx.moveTo(dc.pp[0][0],dc.pp[0][1]);
       for(let i=1;i<dc.pp.length;i++) ctx.lineTo(dc.pp[i][0],dc.pp[i][1]);
       ctx.closePath();
+      // Parse color and apply alpha
       ctx.globalAlpha=dc.alpha;
       ctx.fillStyle=dc.color; ctx.fill();
       ctx.globalAlpha=1;
@@ -967,6 +1021,7 @@ function drawMold3d(){
     }
   }
 
+  // HUD
   ctx.globalAlpha=1;
   ctx.fillStyle='rgba(139,144,160,0.65)';
   ctx.font='9px "JetBrains Mono",monospace';
@@ -976,7 +1031,8 @@ function drawMold3d(){
   ctx.fillText('drag=rotate  scroll=zoom  dbl=reset',W-8,H-10);
 }
 
-// ─── 3D PURE CANVAS RENDERER ───
+// ─── 3D PURE CANVAS RENDERER (no external deps) ───
+// Simple perspective projection with painter's-algorithm depth sort.
 function init3d(){
   const canvas=document.getElementById('canvas3d');
   if(!canvas)return;
@@ -986,6 +1042,7 @@ function init3d(){
   const H=Math.max(100,Math.round(rect.height)||wrap.offsetHeight||300);
   canvas.width=W; canvas.height=H;
 
+  // Pointer events for rotate + zoom
   canvas.onpointerdown=e=>{isDragging=true;lastMouse={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);};
   canvas.onpointerup=canvas.onpointercancel=()=>isDragging=false;
   canvas.onpointermove=e=>{
@@ -1019,6 +1076,7 @@ function draw3d(){
   const eFH=floor_h*(1-compress*0.98);
   const eDx=dx*(1-compress*0.5);
 
+  // Build 3D vertex rings
   const rings=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -1031,19 +1089,24 @@ function draw3d(){
     rings.push(row);
   }
 
+  // Rotation matrices Rx * Ry
   const cx=Math.cos(rotX),sx=Math.sin(rotX);
   const cy=Math.cos(rotY),sy=Math.sin(rotY);
   function rotate([x,y,z]){
+    // Ry
     const x1=x*cy+z*sy, z1=-x*sy+z*cy;
+    // Rx
     const y2=y*cx-z1*sx, z2=y*sx+z1*cx;
     return [x1,y2,z2];
   }
 
+  // Auto-fit camera distance
   const modelH=totalFloors*eFH;
   const modelSpan=Math.max(R*2,modelH)*1.8;
   const dist=cam3dDist||modelSpan+2;
 
-  const fov=0.8;
+  // Perspective project to canvas
+  const fov=0.8; // radians half-fov approximation
   const cx2=W/2, cy2=H/2;
   const scale=Math.min(W,H)/(2*fov*dist);
 
@@ -1052,9 +1115,10 @@ function draw3d(){
     const zd=z+dist;
     if(zd<=0.01)return null;
     const sc=scale*(dist/zd);
-    return[cx2+x*sc, cy2-y*sc, zd];
+    return[cx2+x*sc, cy2-y*sc, zd]; // returns [px, py, depth]
   }
 
+  // Collect all segments with their average depth for painter's sort
   const segs=[];
 
   for(let f=0;f<totalFloors;f++){
@@ -1063,15 +1127,22 @@ function draw3d(){
       const v1=rings[f][k], v2=rings[f][k2];
       const v3=rings[f+1][k], v4=rings[f+1][k2];
 
+      // Horizontal ring edges (blue valley)
       segs.push({type:'blue', pts:[v1,v2]});
+      // Vertical mountain creases (red)
       segs.push({type:'red', pts:[v1,v3]});
+      // Green diagonal
       const gv=(f*chir)%2===0?[v2,v3]:[v1,v4];
       segs.push({type:'green', pts:gv});
+
+      // Semi-transparent face for depth cue
       segs.push({type:'face', pts:[v1,v2,v4,v3]});
     }
   }
+  // Top ring edge
   for(let k=0;k<n;k++) segs.push({type:'blue', pts:[rings[totalFloors][k],rings[totalFloors][(k+1)%n]]});
 
+  // Compute depth (average z after rotation) and project
   const projected=segs.map(s=>{
     const pp=s.pts.map(project);
     if(pp.some(x=>!x))return null;
@@ -1079,12 +1150,15 @@ function draw3d(){
     return{...s,pp,avgZ};
   }).filter(Boolean);
 
+  // Sort back-to-front
   projected.sort((a,b)=>b.avgZ-a.avgZ);
 
+  // Draw
   for(const seg of projected){
     const{type,pp}=seg;
     ctx.beginPath();
     if(type==='face'){
+      // Filled translucent face
       ctx.moveTo(pp[0][0],pp[0][1]);
       for(let i=1;i<pp.length;i++) ctx.lineTo(pp[i][0],pp[i][1]);
       ctx.closePath();
@@ -1101,6 +1175,7 @@ function draw3d(){
     ctx.setLineDash([]);
   }
 
+  // Overlay: compress value + hint
   ctx.fillStyle='rgba(139,144,160,0.7)';
   ctx.font='10px "JetBrains Mono",monospace';
   ctx.textAlign='left';
@@ -1109,7 +1184,13 @@ function draw3d(){
   ctx.fillText('drag=rotate  scroll=zoom  dbl=reset',W-8,H-10);
 }
 
-// ─── ENERGY GRAPH ───
+// ─── ENERGY GRAPH (corrected) ───
+// Physical model: Kresling tube modelled as a single-DOF mechanism.
+// The only DOF is the rotation angle φ of each polygon ring relative to its neighbor.
+// At full extension: φ = φ_0 (the designed angle). At full collapse: φ = π/n (flat).
+// Energy stored in elastic creases: E(φ) = k*(φ - φ_rest)²  per crease.
+// Mountain creases and valley (green diagonal) creases have different rest angles.
+// The height h is related to φ by the exact kinematic constraint of the Kresling geometry.
 function drawEnergy(){
   const canvas=document.getElementById('canvasEnergy');
   const wrap=canvas.parentElement;
@@ -1121,112 +1202,164 @@ function drawEnergy(){
   ctx.fillStyle='#1a1d28';ctx.fillRect(0,0,W,H);
 
   const p=getP(),g=computeGeometry(p);
-  const{n,floors,stack}=p;
-  const{floor_h,R,phi0,b3d:b0_3d,c3d:c0_3d}=g;
+  const{n,floors,stack,angle}=p;
+  const{floor_h,R,b,dx}=g;
   const totalFloors=floors*stack;
 
-  // ── AXIAL TRUSS MODEL (Masana & Daqaq 2019 / Alipour & Arghavani 2023) ──
-  // Each crease is an axial spring with rest length from the designed geometry.
-  // Energy: E(h,φ) = n·[k_m·(b−b₀)² + k_v·(c−c₀)²] / 2   per floor
-  // where b = sqrt(h²+4R²sin²φ), c = sqrt(h²+4R²sin²(π/n+φ)), φ = half-rotation angle.
-  // Rest lengths b₀, c₀ from computeGeometry (designed state).
-  // Mountain creases are stiffer (valley fold) than diagonal valley creases.
-  const k_m=2.0, k_v=1.0;
+  // The designed (rest) rotation angle per floor from the crease geometry:
+  // Each polygon ring is rotated by φ_0 = atan2(dx, R*sin(π/n)) from the previous
+  // More precisely, from the flat-pattern geometry, the side chord = b = 2R*sin(π/n)
+  // The angular offset per floor: φ_0 = dx / R  (small-angle linearization used in 3D rendering)
+  // For the energy model we use the exact dihedral angles
 
-  // Physical height range: 0→ mountain crease limit (b₀ = inextensible limit)
-  const h_max=b0_3d*0.998;
-  const h_min=b0_3d*0.015;
-  if(h_max<=h_min||!isFinite(b0_3d)||b0_3d<=0){
-    ctx.fillStyle='#f87171';ctx.font='12px monospace';
-    ctx.fillText('Cannot compute energy: invalid geometry',20,H/2);return;
+  // Parameterize by height h (floor height), range [h_min, h_max]
+  // h_min: nearly flat (collapsed), a small fraction of b
+  // h_max: maximum possible = when green crease is taut (length constraint)
+  // green crease length L_g = sqrt((b+2*dx0)^2 + floor_h^2) is FIXED (paper is inextensible)
+  // As h changes, dx must adjust to keep green crease length = L_g_0
+  // → h² + (b + 2*dx(h))² = L_g_0²
+  // → dx(h) = (sqrt(L_g_0² - h²) - b) / 2
+
+  const L_g0 = g.green_len; // fixed green crease length
+  const L_r0 = g.red_len;   // fixed red crease length (also inextensible)
+  // red crease: sqrt(dx² + h²) = L_r0 → dx_red(h) = sqrt(L_r0² - h²)
+  // Both constraints must hold simultaneously: use red crease to define dx(h)
+  // dx(h) = sqrt(L_r0² - h²)  — from inextensibility of red crease
+  // then check green crease is consistent
+
+  const h_max = L_r0 * 0.999; // physical max height
+  const h_min = L_r0 * 0.02;  // near-collapsed (not exactly 0 to avoid degenerate geometry)
+
+  const STEPS = 400;
+  const energyPoints=[], heightPoints=[];
+
+  // At the designed state (h = floor_h), the crease angles are the "rest" angles
+  // Fold angle for mountain crease: angle between two triangular faces sharing the red crease
+  // We approximate the fold angle as ψ_m(h) = π - 2*atan(dx(h)/h) ... simplified planar approximation
+  // More accurately, for the Kresling triangulated surface:
+  // The dihedral angle across the mountain (vertical) crease depends on the polygon geometry
+  // Use vector cross product of face normals for each triangle pair
+
+  function getDihedral(h){
+    if(h<=0||h>=L_r0)return null;
+    const dxH=Math.sqrt(Math.max(0,L_r0*L_r0-h*h));
+    // Check if green crease constraint allows this height
+    const L_g_check=Math.sqrt((b+2*dxH)*(b+2*dxH)+h*h);
+    const phi=dxH/R;
+    const alpha=Math.PI/n;
+
+    // Plain vector math helpers (no Three.js)
+    const vsub=([ax,ay,az],[bx,by,bz])=>[ax-bx,ay-by,az-bz];
+    const vcross=([ax,ay,az],[bx,by,bz])=>[ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx];
+    const vdot=([ax,ay,az],[bx,by,bz])=>ax*bx+ay*by+az*bz;
+    const vnorm=v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};
+
+    const A=[R, 0, 0];
+    const B=[R*Math.cos(2*alpha), R*Math.sin(2*alpha), 0];
+    const C=[R*Math.cos(phi)*Math.cos(alpha)-R*Math.sin(phi)*Math.sin(alpha),
+             R*Math.cos(phi)*Math.sin(alpha)+R*Math.sin(phi)*Math.cos(alpha), h];
+    const D=[R*Math.cos(phi+2*alpha), R*Math.sin(phi+2*alpha), h];
+
+    const n1=vnorm(vcross(vsub(B,A),vsub(C,A)));
+    const n2=vnorm(vcross(vsub(C,A),vsub(D,A)));
+    const psi_m=Math.acos(Math.max(-1,Math.min(1,vdot(n1,n2))));
+    const n3=vnorm(vcross(vsub(C,B),vsub(A,B)));
+    const psi_v=Math.acos(Math.max(-1,Math.min(1,-vdot(n1,n3))));
+    return{psi_m,psi_v,dxH,L_g:L_g_check};
   }
 
-  const STEPS=400;
-  const PHI_N=200;   // phi resolution for minimisation over rotation angle
-  const energyPoints=[],heightPoints=[];
-  let minE=Infinity,maxE=-Infinity;
+  const restAngles=getDihedral(floor_h);
+  if(!restAngles){ctx.fillStyle='#f87171';ctx.font='12px monospace';ctx.fillText('Cannot compute energy: invalid geometry',20,H/2);return;}
+  const{psi_m:psi_m0,psi_v:psi_v0}=restAngles;
 
-  // Phi scan range: [-π/2, π/2] covers all physically distinct sin²(φ) values.
-  // Critical: must include negative phi for Angle BR > 90° (phi0 < 0 in those cases).
-  const PHI_LO=-Math.PI/2, PHI_HI=Math.PI/2;
+  // Spring constants (mountain folds stiffer for typical paper crease)
+  const k_m=2.0,k_v=1.0;
+  let minE=Infinity,maxE=-Infinity;
 
   for(let i=0;i<=STEPS;i++){
     const h=h_min+(i/STEPS)*(h_max-h_min);
-    let minEi=Infinity;
-    // Include phi0 explicitly so the designed state reads exactly E=0
-    const phiCandidates=[phi0];
-    for(let pi=0;pi<=PHI_N;pi++){
-      phiCandidates.push(PHI_LO+(pi/PHI_N)*(PHI_HI-PHI_LO));
-    }
-    for(const phi of phiCandidates){
-      const b_c=Math.sqrt(h*h+4*R*R*Math.sin(phi)*Math.sin(phi));
-      const c_c=Math.sqrt(h*h+4*R*R*Math.pow(Math.sin(Math.PI/n-phi),2)); // FIXED: − matches c3d
-      const Ei=n*totalFloors*(k_m*(b_c-b0_3d)*(b_c-b0_3d)+k_v*(c_c-c0_3d)*(c_c-c0_3d))*0.5;
-      if(Ei<minEi)minEi=Ei;
-    }
-    energyPoints.push(minEi);
+    const angles=getDihedral(h);
+    if(!angles){energyPoints.push(0);heightPoints.push(h*totalFloors);continue;}
+    const{psi_m,psi_v}=angles;
+    const dm=psi_m-psi_m0,dv=psi_v-psi_v0;
+    const E=(k_m*dm*dm+k_v*dv*dv)*n*totalFloors;
+    energyPoints.push(E);
     heightPoints.push(h*totalFloors);
-    if(minEi<minE)minE=minEi;
-    if(minEi>maxE)maxE=minEi;
+    if(E<minE)minE=E;if(E>maxE)maxE=E;
   }
 
-  const WINDOW=8;
+  // Find local minima with noise tolerance (window of 5 pts)
   const localMinima=[];
+  const WINDOW=8;
   for(let i=WINDOW;i<energyPoints.length-WINDOW;i++){
     let isMin=true;
     for(let j=i-WINDOW;j<=i+WINDOW;j++){if(j!==i&&energyPoints[j]<=energyPoints[i]){isMin=false;break;}}
     if(isMin)localMinima.push({idx:i,h:heightPoints[i],E:energyPoints[i]});
   }
+  // Merge minima that are too close together (within 5% of range)
   const mergedMinima=[];
   let lastH=-Infinity;
   for(const m of localMinima){
     if(m.h-lastH>(h_max-h_min)*totalFloors*0.05){mergedMinima.push(m);lastH=m.h;}
   }
 
+  // Check endpoints
   const endpointMinima=[];
   if(energyPoints[0]<energyPoints[WINDOW])endpointMinima.push({idx:0,h:heightPoints[0],E:energyPoints[0],label:'Collapsed'});
   if(energyPoints[STEPS]<energyPoints[STEPS-WINDOW])endpointMinima.push({idx:STEPS,h:heightPoints[STEPS],E:energyPoints[STEPS],label:'Extended'});
 
   const allMinima=[...endpointMinima,...mergedMinima];
-  // Bistable: two distinct energy wells (≥1 interior minimum + designed-state well)
+  // True bistability: need exactly 2 distinct energy wells separated by a local maximum
   const trulBistable=mergedMinima.length>=1&&(endpointMinima.length>=1||mergedMinima.length>=2);
-  const isBistable=trulBistable&&g.bistable;
+  // Cross-check with geometric criterion
+  const geomBistable=g.bistable;
+  const isBistable=trulBistable&&geomBistable;
 
+  // Layout
   const PAD={l:52,r:16,t:36,b:48};
   const gW=W-PAD.l-PAD.r,gH=H-PAD.t-PAD.b;
   const totalH_max=heightPoints[STEPS],totalH_min=heightPoints[0];
   function toX(h){return PAD.l+(h-totalH_min)/(totalH_max-totalH_min+1e-9)*gW;}
   function toY(E){return PAD.t+gH-((E-minE)/(maxE-minE+1e-9))*gH;}
 
+  // Grid
   ctx.strokeStyle='rgba(59,130,246,0.1)';ctx.lineWidth=0.5;
   for(let i=0;i<=4;i++){const y=PAD.t+i*(gH/4);ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+gW,y);ctx.stroke();}
   for(let i=0;i<=5;i++){const x=PAD.l+i*(gW/5);ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+gH);ctx.stroke();}
 
+  // Axes
   ctx.strokeStyle='rgba(180,200,255,0.45)';ctx.lineWidth=1.2;
   ctx.beginPath();ctx.moveTo(PAD.l,PAD.t);ctx.lineTo(PAD.l,PAD.t+gH);ctx.lineTo(PAD.l+gW,PAD.t+gH);ctx.stroke();
 
+  // Axis labels
   ctx.fillStyle='rgba(139,144,160,0.9)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='center';
   ctx.fillText('Total height (cm)',PAD.l+gW/2,H-6);
   ctx.save();ctx.translate(11,PAD.t+gH/2);ctx.rotate(-Math.PI/2);ctx.fillText('Energy (a.u.)',0,0);ctx.restore();
+  // Tick x
   ctx.textAlign='center';ctx.font='9px "JetBrains Mono",monospace';
   for(let i=0;i<=5;i++){const h=totalH_min+(i/5)*(totalH_max-totalH_min);ctx.fillStyle='rgba(139,144,160,0.7)';ctx.fillText(h.toFixed(1),toX(h),PAD.t+gH+13);}
+  // Tick y
   ctx.textAlign='right';
   for(let i=0;i<=4;i++){const E=minE+(1-i/4)*(maxE-minE);const y=PAD.t+(i/4)*gH;ctx.fillStyle='rgba(139,144,160,0.6)';ctx.fillText(E.toFixed(3),PAD.l-4,y+3);}
 
+  // Fill under curve
   ctx.beginPath();ctx.moveTo(toX(heightPoints[0]),PAD.t+gH);
   for(let i=0;i<=STEPS;i++)ctx.lineTo(toX(heightPoints[i]),toY(energyPoints[i]));
   ctx.lineTo(toX(heightPoints[STEPS]),PAD.t+gH);ctx.closePath();
   ctx.fillStyle='rgba(59,130,246,0.07)';ctx.fill();
 
+  // Curve
   ctx.beginPath();
   for(let i=0;i<=STEPS;i++){const x=toX(heightPoints[i]),y=toY(energyPoints[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
   ctx.strokeStyle='#378ADD';ctx.lineWidth=2;ctx.setLineDash([]);ctx.stroke();
 
+  // Designed state marker (vertical line)
   const designedH=floor_h*totalFloors;
   const dX=toX(designedH);
   ctx.beginPath();ctx.moveTo(dX,PAD.t);ctx.lineTo(dX,PAD.t+gH);
   ctx.strokeStyle='rgba(160,160,200,0.3)';ctx.lineWidth=1;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
 
+  // Local minima markers
   const eqColors=['#4ade80','#fbbf24','#a78bfa','#f87171'];
   allMinima.forEach((eq,idx)=>{
     const x=toX(eq.h),y=toY(eq.E);
@@ -1240,6 +1373,7 @@ function drawEnergy(){
     ctx.fillText(lbl,x,y-8);ctx.fillText(eq.h.toFixed(1)+'cm',x,y-18);
   });
 
+  // Current state (compression slider)
   const curH=(1-p.compress)*(designedH-h_min*totalFloors)+h_min*totalFloors;
   const curIdx=Math.round((curH-totalH_min)/(totalH_max-totalH_min)*STEPS);
   const curE=energyPoints[Math.max(0,Math.min(STEPS,curIdx))];
@@ -1250,8 +1384,9 @@ function drawEnergy(){
   ctx.fillText(`h=${curH.toFixed(2)}`,cx2+(cx2+80>W-PAD.r?-8:8),cy2-3);
   ctx.fillText(`E=${curE.toFixed(4)}`,cx2+(cx2+80>W-PAD.r?-8:8),cy2+9);
 
+  // Title + bistability label
   ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
-  ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm  [truss model]`,PAD.l,PAD.t-18);
+  ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm`,PAD.l,PAD.t-18);
   if(isBistable){
     ctx.fillStyle='#4ade80';ctx.font='9px "JetBrains Mono",monospace';ctx.textAlign='right';
     ctx.fillText('BISTABLE — two energy wells',PAD.l+gW,PAD.t-18);
@@ -1260,9 +1395,12 @@ function drawEnergy(){
     ctx.fillText('monostable',PAD.l+gW,PAD.t-18);
   }
 
+  // ─── HOVER CROSSHAIR + TOOLTIP ───
   if(energyHoverX !== null){
     const hx = energyHoverX;
+    // Only show if within plot area
     if(hx >= PAD.l && hx <= PAD.l+gW){
+      // Interpolate height value from x pixel
       const hoverH = totalH_min + ((hx-PAD.l)/gW)*(totalH_max-totalH_min);
       const hoverIdx = Math.round((hoverH-totalH_min)/(totalH_max-totalH_min+1e-9)*STEPS);
       const clampIdx = Math.max(0,Math.min(STEPS,hoverIdx));
@@ -1270,19 +1408,23 @@ function drawEnergy(){
       const hoverHActual = heightPoints[clampIdx];
       const hy = toY(hoverE);
 
+      // Vertical crosshair line
       ctx.save();
       ctx.beginPath();ctx.moveTo(hx,PAD.t);ctx.lineTo(hx,PAD.t+gH);
       ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=1;ctx.setLineDash([4,3]);ctx.stroke();
       ctx.setLineDash([]);
 
+      // Horizontal crosshair line
       ctx.beginPath();ctx.moveTo(PAD.l,hy);ctx.lineTo(PAD.l+gW,hy);
       ctx.strokeStyle='rgba(255,255,255,0.2)';ctx.lineWidth=0.8;ctx.setLineDash([4,3]);ctx.stroke();
       ctx.setLineDash([]);
 
+      // Dot on curve
       ctx.beginPath();ctx.arc(hx,hy,4,0,Math.PI*2);
       ctx.fillStyle='#facc15';ctx.fill();
       ctx.strokeStyle='#1a1d28';ctx.lineWidth=1.5;ctx.stroke();
 
+      // Tooltip box
       const lines=[
         `h = ${hoverHActual.toFixed(3)} cm`,
         `E = ${hoverE.toFixed(5)}`,
@@ -1291,6 +1433,7 @@ function drawEnergy(){
       const tfs=9, tlh=tfs+3, tPad=6;
       const tW=120, tH=lines.length*tlh+tPad*2;
       let tx=hx+10, ty=hy-tH/2;
+      // Keep inside plot
       if(tx+tW>PAD.l+gW) tx=hx-tW-10;
       if(ty<PAD.t) ty=PAD.t;
       if(ty+tH>PAD.t+gH) ty=PAD.t+gH-tH;
@@ -1319,19 +1462,20 @@ function draw(){
 }
 
 // ─── ENERGY HOVER STATE ───
-let energyHoverX = null;
+let energyHoverX = null; // null = no hover, otherwise canvas pixel x
 
 // ─── INFO BOX HELPERS ───
+// Left column / right column labels matching the reference image style
 function infoBoxLines(p, g, bounds){
   const patW=(bounds.w*p.scale).toFixed(2);
   const patH=(bounds.h*p.scale).toFixed(2);
   const totalLen=(p.dia*Math.PI).toFixed(3);
   const left=[
     `Floor height: ${g.floor_h.toFixed(2)} cm`,
-    `a\u2080 (side): ${g.b.toFixed(3)} cm`,
-    `b\u2083d (mtn): ${g.b3d.toFixed(2)} cm`,
+    `One side: ${g.b.toFixed(3)} cm`,
+    `Red line: ${g.red_len.toFixed(2)} cm`,
     `Blue-Red Angle: ${p.angle.toFixed(1)}\u00b0`,
-    `\u03c6\u2080 (rot/floor): ${(Math.abs(g.phi0)*180/Math.PI).toFixed(2)}\u00b0`,
+    `Green-Red angle: ${g.gr_angle.toFixed(2)}\u00b0`,
     `h0/R: ${g.h0r.toFixed(4)}`,
     `Bistable: ${g.bistable?'yes':'no'}`,
   ];
@@ -1347,6 +1491,9 @@ function infoBoxLines(p, g, bounds){
   return{left,right};
 }
 
+// Draw info box in bottom gap — no white box, text fills the gap space
+// Screen: transparent bg, light-coloured text
+// Print (PNG/PDF): transparent bg, dark text (for print legibility)
 function drawInfoBoxCanvas(ctx, toC, sc, x0, x1, gapHiCm, gapLoCm, p, g, bounds, forPrint){
   const{left,right}=infoBoxLines(p,g,bounds);
   const lineCount=Math.max(left.length,right.length);
@@ -1359,17 +1506,21 @@ function drawInfoBoxCanvas(ctx, toC, sc, x0, x1, gapHiCm, gapLoCm, p, g, bounds,
   const gapW=px1-px0;
   if(gapH<4||gapW<20)return;
 
+  // Fit font so all lines fill the gap snugly
   const padPx=Math.max(2, Math.round(gapH*0.06));
   const availH=gapH-padPx*2;
+  // Start big, shrink until all lines fit
   let fs=Math.floor(availH/lineCount)-2;
   fs=Math.max(5, Math.min(11, fs));
   const lh=Math.floor(availH/lineCount);
+  // Total text block centered vertically
   const totalTextH=lineCount*lh;
   const startY=rectTop+padPx+Math.floor((availH-totalTextH)/2)+fs;
 
   ctx.save();
   ctx.font=`${fs}px "Courier New",Courier,monospace`;
   ctx.textBaseline='alphabetic';
+  // Color: screen = soft blue-white, print = near-black
   ctx.fillStyle=forPrint?'#111111':'rgba(200,220,255,0.85)';
   ctx.textAlign='left';
   left.forEach((t,i)=>ctx.fillText(t, px0+padPx+2, startY+i*lh));
@@ -1382,6 +1533,7 @@ function drawInfoBoxCanvas(ctx, toC, sc, x0, x1, gapHiCm, gapLoCm, p, g, bounds,
 function infoBoxSVGText(p, g, bounds, CM, olX, orX, topYsvg, botYsvg, lastCreaseYsvg){
   const{left,right}=infoBoxLines(p,g,bounds);
   const lineCount=Math.max(left.length,right.length);
+  // Bottom gap: lastCreaseYsvg (top edge) → botYsvg (bottom edge), SVG y increases downward
   const gapTop=lastCreaseYsvg;
   const gapBot=botYsvg;
   const gapH=gapBot-gapTop;
@@ -1396,6 +1548,7 @@ function infoBoxSVGText(p, g, bounds, CM, olX, orX, topYsvg, botYsvg, lastCrease
   const startY=gapTop+padPx+Math.floor((availH-totalH)/2)+fs;
 
   let out='';
+  // No background rect — transparent, dark text for print legibility
   out+=`<g font-family="'Courier New',Courier,monospace" font-size="${fs}" fill="#111111">\n`;
   left.forEach((t,i)=>{
     out+=`<text x="${(olX+padPx+2).toFixed(1)}" y="${(startY+i*lh).toFixed(1)}">${escSVG(t)}</text>\n`;
@@ -1408,7 +1561,8 @@ function infoBoxSVGText(p, g, bounds, CM, olX, orX, topYsvg, botYsvg, lastCrease
 }
 function escSVG(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-// ─── SHARED RENDER TO CANVAS ───
+// ─── SHARED RENDER TO CANVAS (used by both screen drawFlat and exports) ───
+// sc = pixels-per-cm, ox/oy = canvas origin offset
 function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
   const{n,floors,ext,seaml,seamr,extcols,stack,showmv,chir,scale,showA4,showGrid}=p;
   const{b,floor_h,dx}=g;
@@ -1419,9 +1573,13 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
   const patOriginX=(A4_W-scaledPatW)/2;
   const patOriginY=(A4_H-scaledPatH)/2;
 
+  // toC: cm → canvas pixels. ox/oy already include margin.
+  // For print: y=0 at bottom of A4 → canvas y = (A4_H - ycm)*sc
+  // For screen: same but with ox/oy offset
   function toC(xcm,ycm){return[ox+xcm*sc, oy+(A4_H-ycm)*sc];}
 
   if(!forPrint){
+    // Screen: draw grid and A4 shading
     const[a4x,a4y]=toC(0,A4_H),[a4x2,a4y2]=toC(A4_W,0);
     if(showGrid){
       ctx.save();ctx.strokeStyle='rgba(59,130,246,0.07)';ctx.lineWidth=0.5;
@@ -1440,6 +1598,7 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
     }
   }
 
+  // Build vertices in cm
   const verts=[];
   for(let f=0;f<=totalFloors;f++){
     const row=[];
@@ -1460,7 +1619,7 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
   const topY=y0-extS,botY=y3+extS;
   const seamLX=x0-seamlS,seamRX=x1+seamrS;
 
-  const lw=forPrint?sc/37.795:1;
+  const lw=forPrint?sc/37.795:1; // scale linewidth for print DPI
 
   function line(ax,ay,bx,by,col,w,dash){
     const[cx1,cy1]=toC(ax,ay),[cx2,cy2]=toC(bx,by);
@@ -1469,14 +1628,17 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
     ctx.setLineDash(dash?dash.map(d=>d*lw):[]);ctx.stroke();ctx.setLineDash([]);
   }
 
+  // Purple cut box
   const purp=forPrint?'#6a1fa0':'#9f6fdf';
   line(x0,topY,x0,botY,purp,forPrint?2.5:1.8);line(x1,topY,x1,botY,purp,forPrint?2.5:1.8);
   line(x0,topY,x1,topY,purp,forPrint?2.5:1.8);line(x2,botY,x3,botY,purp,forPrint?2.5:1.8);
   if(seamlS>0){line(seamLX,topY,seamLX,botY,'slateblue',1.2,[4,3]);[topY,botY,y0,verts[totalFloors][olIdx][1]].forEach(yy=>line(seamLX,yy,x0,yy,'slateblue',1.2,[4,3]));}
   if(seamrS>0){line(seamRX,topY,seamRX,botY,'slateblue',1.2,[4,3]);[topY,botY,verts[0][orIdx][1],verts[totalFloors][orIdx][1]].forEach(yy=>line(x1,yy,seamRX,yy,'slateblue',1.2,[4,3]));}
 
+  // Info box in BOTTOM gap: between floor-0 line (y0) and bottom purple border (topY)
   drawInfoBoxCanvas(ctx, toC, sc, x0, x1, y0, topY, p, g, bounds, forPrint);
 
+  // Red mountain zigzags
   const redCol=forPrint?'#cc0000':'#e05252';
   for(let ci=1;ci<total_cols-1;ci++){
     ctx.beginPath();
@@ -1490,6 +1652,7 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
   ctx.beginPath();lPts.forEach(([vx,vy],i)=>{const[cx,cy]=toC(vx,vy);i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);});
   ctx.strokeStyle=redCol;ctx.lineWidth=(forPrint?1.6:1.1)*lw;ctx.setLineDash([5*lw,3*lw]);ctx.stroke();ctx.setLineDash([]);
 
+  // Blue valley horizontals
   const blueCol=forPrint?'#0044cc':'#378ADD';
   for(let f=0;f<=totalFloors;f++){
     const yL=verts[f][0][1];
@@ -1497,6 +1660,7 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
     ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(rx,ry);ctx.strokeStyle=blueCol;ctx.lineWidth=(forPrint?2.0:1.3)*lw;ctx.setLineDash([]);ctx.stroke();
   }
 
+  // Green diagonals
   const greenCol=forPrint?'#007a30':'#3dba6e';
   ctx.strokeStyle=greenCol;ctx.lineWidth=(forPrint?1.5:1.0)*lw;ctx.setLineDash([5*lw,4*lw]);
   for(let f=0;f<totalFloors;f++){
@@ -1510,6 +1674,7 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
   ctx.setLineDash([]);
 
   if(!forPrint){
+    // Dimension labels (screen only)
     ctx.save();ctx.fillStyle='rgba(180,220,255,0.55)';ctx.font='9px "JetBrains Mono",monospace';
     const[lx0,ly0]=toC(x0-seamlS,topY-0.3),[rx0]=toC(x1+seamrS,topY-0.3);
     ctx.fillText(`W=${(bounds.w*scale).toFixed(1)}cm`,(lx0+rx0)/2-18,ly0-3);
@@ -1520,10 +1685,12 @@ function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint){
 
 // ─── EXPORTS ───
 function exportSVG(){
+  // Build SVG by rendering to a high-res canvas then embed as PNG — keeps exact geometry
+  // Actually use SVG path generation matching renderPatternToCtx logic
   const p=getP(),g=computeGeometry(p);
   const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
   const{b,floor_h,dx}=g;
-  const CM=37.795;
+  const CM=37.795; // px per cm at 96dpi
   const totalFloors=floors*stack;
   const col_min=-extcols,col_max=n+extcols,total_cols=col_max-col_min+1;
   const bounds=patternBounds(p,g);
@@ -1531,6 +1698,7 @@ function exportSVG(){
   const patOriginX=(A4_W-scaledW)/2,patOriginY=(A4_H-scaledH)/2;
   const A4pxW=Math.round(A4_W*CM),A4pxH=Math.round(A4_H*CM);
 
+  // Convert cm to SVG px (y flipped: SVG y=0 at top)
   function toSVG(xcm,ycm){return[xcm*CM,(A4_H-ycm)*CM];}
 
   const verts=[];
@@ -1583,9 +1751,12 @@ function exportSVG(){
       lines.push(L(ax,ay,bxv,byv,'#007a30',1.5,'6 4'));
     }
   }
+  // Info box SVG in bottom gap: floor-0 line → bottom purple border
+  // In SVG: y0 (cm) → larger SVG y (lower on page), topY (cm, = y0-extS) → even larger SVG y
+  // So bottom gap top edge = toSVG(y0), bottom edge = toSVG(topY)
   const[olX]=toSVG(x0,0),[orX]=toSVG(x1,0);
-  const[,gapTopSVG]=toSVG(0,y0);
-  const[,gapBotSVG]=toSVG(0,topY);
+  const[,gapTopSVG]=toSVG(0,y0);   // floor-0 line in SVG coords (top of bottom gap)
+  const[,gapBotSVG]=toSVG(0,topY); // bottom purple border in SVG coords (bottom of bottom gap)
   lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,null,gapBotSVG,gapTopSVG));
 
   const svg=`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${A4pxW}" height="${A4pxH}" viewBox="0 0 ${A4pxW} ${A4pxH}"><rect width="100%" height="100%" fill="white"/>\n${lines.join('\n')}\n</svg>`;
@@ -1593,6 +1764,7 @@ function exportSVG(){
   a.download=`kresling_n${p.n}_f${p.floors}_s${p.stack}.svg`;a.click();
 }
 
+// PNG export — render via renderPatternToCtx at 200dpi
 function exportPNGA4(){
   const p=getP(),g=computeGeometry(p);
   const DPI=200,CM_TO_PX=DPI/2.54;
@@ -1600,14 +1772,17 @@ function exportPNGA4(){
   const off=document.createElement('canvas');off.width=W;off.height=H;
   const ctx=off.getContext('2d');
   ctx.fillStyle='white';ctx.fillRect(0,0,W,H);
+  // ox=0, oy=0 because toC in renderPatternToCtx handles A4 coords directly
   renderPatternToCtx(ctx, p, g, W, H, CM_TO_PX, 0, 0, true);
   const a=document.createElement('a');a.href=off.toDataURL('image/png');
   a.download=`kresling_A4_n${p.n}_f${p.floors}.png`;a.click();
 }
 
+// PDF export — render SVG via print window
 function exportPDF(){
   const p=getP(),g=computeGeometry(p);
-  const DPI=96,CM=DPI/2.54;
+  // Build SVG using same geometry as screen render
+  const DPI=96,CM=DPI/2.54; // SVG uses 96dpi
   const A4pxW=Math.round(A4_W*CM),A4pxH=Math.round(A4_H*CM);
   const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
   const{b,floor_h,dx}=g;
@@ -1669,13 +1844,15 @@ function exportPDF(){
       lines.push(L(ax,ay,bxv,byv,'#007a30',1.5,'6 4'));
     }
   }
+  // Info box in bottom gap — floor-0 line (y0) → bottom purple border (topY)
+  // In SVG coords (y flipped): toSVG(y0) gives larger SVG-y, toSVG(topY) gives even larger SVG-y
   const[olX]=toSVG(x0,0),[orX]=toSVG(x1,0);
-  const[,gapTopSVG]=toSVG(0,y0);
-  const[,gapBotSVG]=toSVG(0,topY);
+  const[,gapTopSVG]=toSVG(0,y0);   // floor-0 line → top edge of bottom gap
+  const[,gapBotSVG]=toSVG(0,topY); // bottom purple border → bottom edge of bottom gap
   lines.push(infoBoxSVGText(p,g,bounds,CM,olX,orX,null,gapBotSVG,gapTopSVG));
 
   const svgBody=`<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 ${A4pxW} ${A4pxH}" preserveAspectRatio="none" style="display:block;position:absolute;top:0;left:0;width:210mm;height:297mm"><rect width="100%" height="100%" fill="white"/>\n${lines.join('\n')}\n</svg>`;
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kresling n=${p.n} f=${p.floors}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:210mm 297mm;margin:0mm}html,body{width:210mm;height:297mm;margin:0;padding:0;background:white;overflow:hidden;position:relative}svg{display:block;position:absolute;top:0;left:0;width:210mm!important;height:297mm!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}@media print{html,body{width:210mm;height:297mm}svg{width:210mm!important;height:297mm!important}}<\/style><\/head><body>${svgBody}<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script><\/body><\/html>`;
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kresling n=${p.n} f=${p.floors}</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:210mm 297mm;margin:0mm}html,body{width:210mm;height:297mm;margin:0;padding:0;background:white;overflow:hidden;position:relative}svg{display:block;position:absolute;top:0;left:0;width:210mm!important;height:297mm!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}@media print{html,body{width:210mm;height:297mm}svg{width:210mm!important;height:297mm!important}}</style></head><body>${svgBody}<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script></body></html>`;
   const win=window.open('','_blank');
   if(!win){alert('Please allow pop-ups for this page to export PDF.');return;}
   win.document.write(html);win.document.close();
@@ -1718,6 +1895,10 @@ function exportDXF(){
   a.download=`kresling_n${n}_f${floors}_s${stack}.dxf`;a.click();
 }
 
+// ─── STL EXPORT — hollow thin-wall Kresling tube ───
+// Generates a watertight ASCII STL with inner and outer surfaces connected at top+bottom rims.
+// Wall thickness = wallT cm. Each Kresling face cell is two triangles × 2 (inner+outer).
+// Top and bottom rims are closed with an annular quad strip (2 triangles each).
 function exportSTL(){
   const p=getP(),g=computeGeometry(p);
   const{n,floors,stack,chir,compress}=p;
@@ -1725,17 +1906,21 @@ function exportSTL(){
   const totalFloors=floors*stack;
   const eFH=floor_h*(1-compress*0.98);
   const eDx=dx*(1-compress*0.5);
-  const wallT=(p.wallmm||0.8)/10;
-  const Ri=Math.max(0.01,R-wallT);
+  const wallT=(p.wallmm||0.8)/10; // mm → cm
+  const Ri=Math.max(0.01,R-wallT); // inner radius
 
+  // Build outer and inner vertex rings
   function makeRings(radius){
     const rings=[];
     for(let f=0;f<=totalFloors;f++){
       const row=[];
       const y3d=f*eFH-(totalFloors*eFH/2);
+      const ang=(f%2===1)?(eDx/radius)*chir:-(eDx/radius)*chir;
+      // Note: angular offset scales with radius for inner surface
+      // but we keep same angular offset for matching connectivity
       const angOuter=(f%2===1)?(eDx/R)*chir:-(eDx/R)*chir;
       for(let k=0;k<n;k++){
-        const a=(2*Math.PI*k/n)+angOuter;
+        const a=(2*Math.PI*k/n)+angOuter; // same angle both surfaces
         row.push([radius*Math.cos(a),y3d,radius*Math.sin(a)]);
       }
       rings.push(row);
@@ -1760,10 +1945,12 @@ function exportSTL(){
       `    endloop\n  endfacet\n`;
   }
 
+  // Two tris from a quad (v1,v2,v3,v4 in winding order)
   function quad(v1,v2,v3,v4){return tri(v1,v2,v3)+tri(v1,v3,v4);}
 
   let stl=`solid kresling_hollow_n${n}_f${floors}\n`;
 
+  // OUTER surface (outward normals — CCW when viewed from outside)
   for(let f=0;f<totalFloors;f++){
     for(let k=0;k<n;k++){
       const k2=(k+1)%n;
@@ -1774,21 +1961,26 @@ function exportSTL(){
     }
   }
 
+  // INNER surface (inward normals — reverse winding)
   for(let f=0;f<totalFloors;f++){
     for(let k=0;k<n;k++){
       const k2=(k+1)%n;
       const v1=innerRings[f][k],v2=innerRings[f][k2];
       const v3=innerRings[f+1][k],v4=innerRings[f+1][k2];
+      // Flip winding for inward normals
       if((f*chir)%2===0){stl+=tri(v3,v2,v1);stl+=tri(v3,v4,v2);}
       else{stl+=tri(v4,v2,v1);stl+=tri(v3,v4,v1);}
     }
   }
 
+  // BOTTOM RIM — annular ring connecting outer[0] to inner[0]
   for(let k=0;k<n;k++){
     const k2=(k+1)%n;
+    // Quad: outer[k], inner[k], inner[k2], outer[k2] — facing downward
     stl+=quad(outerRings[0][k],innerRings[0][k],innerRings[0][k2],outerRings[0][k2]);
   }
 
+  // TOP RIM — annular ring at top, facing upward (reverse winding)
   const tf=totalFloors;
   for(let k=0;k<n;k++){
     const k2=(k+1)%n;
@@ -1803,6 +1995,23 @@ function exportSTL(){
   a.click();
 }
 
+// ─── MOLD STL EXPORT ───
+// Generates a flat press mold for pre-creasing the Kresling crease pattern.
+//
+// Concept:
+//   • A solid rectangular base plate (width=patternW, height=patternH, depth=baseThickness).
+//   • Along each crease line, a sharp triangular ridge protrudes from the flat surface.
+//   • Mountain mold: ridges on TOP face → press paper from above → forms mountain creases.
+//   • Valley mold:   ridges on TOP face for valley lines only → counter-mold for valley folds.
+//   • Two molds together form a matched pair: clamp paper between them, all folds pre-set.
+//
+// Ridge cross-section is an isosceles triangle (base=ridgeW, height=ridgeH).
+// Each crease segment (between two 2D points) becomes an extruded triangular prism.
+// The base plate is a simple rectangular box.
+// All geometry is in cm units matching the crease pattern.
+//
+// STL coordinate system: X = pattern horizontal, Y = pattern vertical, Z = up (out of plate).
+
 function exportMoldSTL(moldType){
   const p=getP(), g=computeGeometry(p);
   const{n,floors,ext,seaml,seamr,extcols,stack,chir,scale}=p;
@@ -1812,13 +2021,16 @@ function exportMoldSTL(moldType){
   const bounds=patternBounds(p,g);
   const scaledW=bounds.w*scale, scaledH=bounds.h*scale;
 
-  const baseT=(p.moldbase||3)/10;
-  const ridgeH=(p.ridgeh||1.2)/10;
-  const ridgeW=(p.ridgew||0.6)/10;
+  // Mold params (convert mm → cm)
+  const baseT=(p.moldbase||3)/10;   // base plate thickness
+  const ridgeH=(p.ridgeh||1.2)/10;  // ridge height above plate surface
+  const ridgeW=(p.ridgew||0.6)/10;  // ridge base width (half-width each side = ridgeW/2)
 
+  // Pattern origin: centered in A4 (same as crease pattern rendering)
   const patOriginX=(A4_W-scaledW)/2;
   const patOriginY=(A4_H-scaledH)/2;
 
+  // Build 2D vertex array (same logic as flat render)
   function makeVerts(){
     const verts=[];
     for(let f=0;f<=totalFloors;f++){
@@ -1842,10 +2054,13 @@ function exportMoldSTL(moldType){
   const topY=y0-extS, botY=y3+extS;
   const seamLX=x0-seamlS, seamRX=x1+seamrS;
 
-  const margin=0.2;
+  // Plate bounds: use the full cut-border rectangle + small margin
+  const margin=0.2; // cm
   const plateX0=seamLX-margin, plateX1=seamRX+margin;
   const plateY0=topY-margin, plateY1=botY+margin;
+  const plateW=plateX1-plateX0, plateH_=plateY1-plateY0;
 
+  // STL helpers
   function cross([ax,ay,az],[bx,by,bz]){return[ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];}
   function sub([ax,ay,az],[bx,by,bz]){return[ax-bx,ay-by,az-bz];}
   function norm(v){const l=Math.hypot(...v)||1;return v.map(c=>c/l);}
@@ -1862,23 +2077,42 @@ function exportMoldSTL(moldType){
 
   let stl=`solid kresling_${moldType}_mold_n${n}_f${floors}\n`;
 
+  // ── BASE PLATE (solid box) ──
+  // Bottom face (z = -baseT)
   const zBot=-baseT, zTop=0;
   const bx0=plateX0, bx1=plateX1, by0=plateY0, by1=plateY1;
+  // Bottom (facing -Z)
   stl+=quad([bx0,by0,zBot],[bx1,by0,zBot],[bx1,by1,zBot],[bx0,by1,zBot]);
+  // Top face (facing +Z) — will have ridges on top, draw as flat then ridges poke through
   stl+=quad([bx0,by0,zTop],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by0,zTop]);
-  stl+=quad([bx0,by0,zBot],[bx0,by0,zTop],[bx0,by1,zTop],[bx0,by1,zBot]);
-  stl+=quad([bx1,by0,zTop],[bx1,by0,zBot],[bx1,by1,zBot],[bx1,by1,zTop]);
-  stl+=quad([bx0,by0,zTop],[bx0,by0,zBot],[bx1,by0,zBot],[bx1,by0,zTop]);
-  stl+=quad([bx0,by1,zBot],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by1,zBot]);
+  // Four sides
+  stl+=quad([bx0,by0,zBot],[bx0,by0,zTop],[bx0,by1,zTop],[bx0,by1,zBot]); // left -X
+  stl+=quad([bx1,by0,zTop],[bx1,by0,zBot],[bx1,by1,zBot],[bx1,by1,zTop]); // right +X
+  stl+=quad([bx0,by0,zTop],[bx0,by0,zBot],[bx1,by0,zBot],[bx1,by0,zTop]); // front -Y
+  stl+=quad([bx0,by1,zBot],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by1,zBot]); // back +Y
+
+  // ── RIDGE PRISM along a 2D segment ──
+  // Given endpoints A=(ax,ay) and B=(bx,by) in pattern space (z=0 plane of plate top),
+  // extrude a triangular ridge along the segment.
+  // The ridge cross-section (perpendicular to segment direction) is a triangle:
+  //   base corners: ±(ridgeW/2) perpendicular to segment at z=0
+  //   apex: at segment center line, z=ridgeH
+  // The prism has: 2 triangular end caps + 2 lateral rectangular faces (each 2 tris).
 
   function addRidge(ax,ay,bx_,by_){
     const dx_=bx_-ax, dy_=by_-ay;
     const len=Math.hypot(dx_,dy_);
     if(len<1e-6)return;
+    // Unit tangent along segment
     const tx=dx_/len, ty=dy_/len;
+    // Unit normal perpendicular to segment (in XY plane)
     const nx_=-ty, ny_=tx;
     const hw=ridgeW/2;
 
+    // 3 vertices of the ridge cross-section at start (A) and end (B)
+    // Left base (z=0): A - hw*n
+    // Right base (z=0): A + hw*n
+    // Apex (z=ridgeH): A + 0*n
     const AL=[ax-hw*nx_,  ay-hw*ny_,  0];
     const AR=[ax+hw*nx_,  ay+hw*ny_,  0];
     const AP=[ax,         ay,         ridgeH];
@@ -1886,15 +2120,24 @@ function exportMoldSTL(moldType){
     const BR=[bx_+hw*nx_, by_+hw*ny_, 0];
     const BP=[bx_,        by_,        ridgeH];
 
+    // Start cap (triangle facing -tangent direction)
     stl+=tri(AL,AP,AR);
+    // End cap (triangle facing +tangent direction)
     stl+=tri(BL,BR,BP);
+    // Left lateral face: AL→BL→BP→AP (quad, normal faces -normal direction)
     stl+=quad(AL,BL,BP,AP);
+    // Right lateral face: AR→AP→BP→BR (quad, normal faces +normal direction)
     stl+=quad(AR,AP,BP,BR);
   }
 
+  // ── COLLECT CREASE SEGMENTS by type ──
+  // Mountain creases: the red zigzag lines (vertical in flat pattern)
+  // Valley creases: the blue horizontal lines + green diagonal lines
+  // (Valley mold has ridges for valley lines; mountain mold has ridges for mountain lines)
   const mountainSegs=[];
   const valleySegs=[];
 
+  // Red mountain zigzags (inner columns only — col 1 to total_cols-2)
   for(let ci=1;ci<total_cols-1;ci++){
     for(let f=0;f<totalFloors;f++){
       const [vx1,vy1]=verts[f][ci];
@@ -1903,11 +2146,13 @@ function exportMoldSTL(moldType){
     }
   }
 
+  // Blue valley horizontals
   for(let f=0;f<=totalFloors;f++){
     const yL=verts[f][0][1];
     valleySegs.push([seamLX,yL,seamRX,yL]);
   }
 
+  // Green diagonal valley creases
   for(let f=0;f<totalFloors;f++){
     for(let ci=0;ci<total_cols-1;ci++){
       const v1=verts[f][ci], v2=verts[f+1][ci+1];
@@ -1919,11 +2164,17 @@ function exportMoldSTL(moldType){
     }
   }
 
+  // ── EMIT RIDGES based on mold type ──
   const segsToRidge = moldType==='mountain' ? mountainSegs : valleySegs;
   for(const [ax_,ay_,bxs,bys] of segsToRidge){
     addRidge(ax_,ay_,bxs,bys);
   }
 
+  // ── CUT-BORDER RIDGES (both molds get the outline so paper can be registered) ──
+  // Use a smaller ridge for the registration/cut border
+  const savedRidgeH=ridgeH;
+  // Temporarily override ridge height to 60% for border marks
+  // (we do this by modifying the addRidge approach directly below)
   const borderRidgeH=ridgeH*0.5;
   function addBorderRidge(ax,ay,bx_,by_){
     const dx_=bx_-ax, dy_=by_-ay;
@@ -1937,10 +2188,11 @@ function exportMoldSTL(moldType){
     stl+=tri(AL,AP,AR);stl+=tri(BL,BR,BP);
     stl+=quad(AL,BL,BP,AP);stl+=quad(AR,AP,BP,BR);
   }
-  addBorderRidge(x0,topY,x1,topY);
-  addBorderRidge(x2,botY,x3,botY);
-  addBorderRidge(x0,topY,x0,botY);
-  addBorderRidge(x1,topY,x1,botY);
+  // Cut border: top, bottom, left, right of pattern
+  addBorderRidge(x0,topY,x1,topY);   // top cut line
+  addBorderRidge(x2,botY,x3,botY);   // bottom cut line
+  addBorderRidge(x0,topY,x0,botY);   // left cut line
+  addBorderRidge(x1,topY,x1,botY);   // right cut line
 
   stl+=`endsolid kresling_${moldType}_mold_n${n}_f${floors}\n`;
 
