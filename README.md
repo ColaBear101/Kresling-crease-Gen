@@ -17,10 +17,27 @@ A web app for designing and exporting Kresling origami crease patterns — the k
 ## Project structure
 
 ```
-index.html      — markup only
-css/main.css    — all styles
-js/main.js      — all application logic (geometry, rendering, exports, UI)
+index.html             — markup only, loads js/main.js as an ES module
+css/main.css           — all styles
+
+js/
+  main.js              — entry point: wires up globals + boots the app
+  constants.js         — A4 dimensions, parameter pairs, preset definitions
+  state.js             — shared mutable state (3D/mold cameras, UI tabs, anim)
+  geometry.js          — computeGeometry, patternBounds, buildVerts
+                          (single source of truth for crease-pattern vertices)
+  ui.js                — DOM readers, toast, debounce, stats bar, info-box text
+  render-flat.js        — flat crease-pattern canvas + pan/zoom/hover
+  render-3d.js          — 3D tube preview
+  render-mold.js        — press-mold preview
+  energy.js             — fold-energy graph + hover
+  presets.js            — preset load / import / export
+  history.js            — undo / redo
+  exports.js            — SVG / PNG / PDF / DXF / STL exporters
+  app.js                — event binding, tab switching, shortcuts, resize handles
 ```
+
+The JS is split by concern rather than kept as one file: each module owns one piece (geometry, a renderer, exports, etc.), and there's a single shared `buildVerts`/`patternBounds` in `geometry.js` that every renderer and exporter calls into, instead of each one re-deriving crease-pattern vertices independently.
 
 ## Geometry & physics
 
@@ -32,7 +49,11 @@ Crease geometry and the fold-energy model follow formulas from:
 
 ## Running locally
 
-No build step required — just open `index.html` in a browser, or serve the folder with any static file server.
+No build step required. Because the JS uses ES module `import`/`export`, it needs to be served over `http://` or `https://` rather than opened directly via `file://` — any static file server works, e.g.:
+
+```
+npx serve .
+```
 
 ---
 
