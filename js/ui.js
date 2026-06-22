@@ -65,6 +65,18 @@ export function updateStats(p, g) {
     ? `✓ ${fitW}%W ${fitH}%H` : `✗ ${fitW}%W ${fitH}%H`;
   document.getElementById('s-fit').style.color   = fits ? '#4ade80' : '#f87171';
 
+  document.getElementById('s-extlen').textContent  = g.extendLen.toFixed(2) + ' cm';
+  document.getElementById('s-foldlen').textContent = g.foldLen.toFixed(2)   + ' cm';
+  const foldIdEl = document.getElementById('s-foldid');
+  if (g.foldInnerValid) {
+    foldIdEl.textContent = g.foldInnerDia.toFixed(2) + ' cm';
+    foldIdEl.style.color = '';
+  } else {
+    foldIdEl.textContent = 'n/a';
+    foldIdEl.style.color = '#f87171';
+    foldIdEl.title = 'Neck would self-intersect the axis at full theoretical fold (low n / high twist)';
+  }
+
   const badge = document.getElementById('validity-badge');
   const warn  = document.getElementById('warn-bar');
   if (!g.valid) {
@@ -101,6 +113,9 @@ export function infoBoxLines(p, g, bounds) {
     `Sides: ${p.n}`,
     `Stack: \u00d7${p.stack}`,
     `Scale: ${(p.scale * 100).toFixed(0)}%`,
+    `Extend length: ${g.extendLen.toFixed(2)} cm`,
+    `Fold length: ${g.foldLen.toFixed(2)} cm`,
+    `Fold inner \u2300: ${g.foldInnerValid ? g.foldInnerDia.toFixed(2) + ' cm' : 'n/a'}`,
   ];
   return { left, right };
 }
