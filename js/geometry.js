@@ -2,7 +2,7 @@ import { A4_W, A4_H } from './constants.js';
 
 // ─── Core geometry ───────────────────────────────────────────────────────────
 export function computeGeometry(p) {
-  const { dia, height, n, floors, angle } = p;
+  const { dia, height, n, floors, stack, angle } = p;
   const R        = dia / 2;
   const b        = (dia * Math.PI) / n;
   const floor_h  = height / floors;
@@ -18,7 +18,36 @@ export function computeGeometry(p) {
   const h0r      = floor_h / R;
   const bistable = h0r > 0 && h0r < 2 * Math.sin(Math.PI / n) && dx > 0 && dx < b;
   const valid    = dx < b && floor_h > 0 && b > 0;
-  return { b, floor_h, dx, red_len, green_len, gr_angle, h0r, bistable, valid, R, green_dx };
+
+  // ─── Theoretical extend / fold limits ──────────────────────────────────────
+  // Model: the mountain (red) crease is the inextensible constraint that ties
+  // floor height to twist offset — same relation already used by the energy
+  // graph: dx(h) = √(red_len² − h²). Extended state = no twist (dx → 0), so
+  // floor height is maximal and equal to the crease length itself. Folded
+  // state = the largest dx the flat pattern allows before adjacent columns
+  // overlap (dx = b, the same boundary the "valid" check already enforces).
+  const totalFloors   = (floors || 1) * (stack || 1);
+  const extFloor_h    = red_len;                       // dx → 0 (fully untwisted)
+  const foldDx        = Math.min(b, red_len);          // dx at the self-overlap limit
+  const foldFloor_h   = Math.sqrt(Math.max(0, red_len * red_len - foldDx * foldDx));
+  const extendLen     = extFloor_h  * totalFloors;     // theoretical max deployed length
+  const foldLen       = foldFloor_h * totalFloors;     // theoretical min (collapsed) length
+
+  // Compressed inner diameter: at the fold limit, ring f and ring f+1 are
+  // twisted ±(foldDx/R) about the axis (alternating convention used by the
+  // 3-D renderer), so the relative twist between them is 2·(foldDx/R). For a
+  // straight edge joining two points on circles of radius R separated by
+  // height h and relative twist angle ψ, the closest approach to the axis
+  // occurs at the edge midpoint, at radius R·cos(ψ/2) — here ψ/2 = foldDx/R.
+  const foldAng        = foldDx / R;
+  const foldInnerR     = R * Math.cos(foldAng);
+  const foldInnerValid = foldInnerR > 0;               // false ⇒ neck would self-intersect the axis
+  const foldInnerDia   = foldInnerValid ? 2 * foldInnerR : null;
+
+  return {
+    b, floor_h, dx, red_len, green_len, gr_angle, h0r, bistable, valid, R, green_dx,
+    extendLen, foldLen, foldDx, foldInnerDia, foldInnerValid,
+  };
 }
 
 // ─── Pattern bounds (single memoised definition — fixes the duplicate-definition bug) ───
