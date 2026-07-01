@@ -1,6 +1,7 @@
 import { getP } from './ui.js';
 import { computeGeometry } from './geometry.js';
 import { ui } from './state.js';
+import { springConstants } from './material.js';
 
 export function drawEnergy() {
   const canvas = document.getElementById('canvasEnergy');
@@ -52,7 +53,7 @@ export function drawEnergy() {
     ctx.fillText('Cannot compute energy: invalid geometry', 20, H/2); return;
   }
   const { psi_m: psi_m0, psi_v: psi_v0 } = rest;
-  const k_m = 2.0, k_v = 1.0;
+  const { k_m, k_v } = springConstants(p, g);
 
   const energyPoints = [], heightPoints = [];
   let minE = Infinity, maxE = -Infinity;
@@ -104,7 +105,8 @@ export function drawEnergy() {
   // Axis labels
   ctx.fillStyle='rgba(139,144,160,0.9)'; ctx.font='10px "JetBrains Mono",monospace'; ctx.textAlign='center';
   ctx.fillText('Total height (cm)', PAD.l+gW/2, H-6);
-  ctx.save();ctx.translate(11,PAD.t+gH/2);ctx.rotate(-Math.PI/2);ctx.fillText('Energy (a.u.)',0,0);ctx.restore();
+  const energyUnitLabel = p.material === 'polyimide' ? 'Energy (N\u00b7cm)' : 'Energy (a.u.)';
+  ctx.save();ctx.translate(11,PAD.t+gH/2);ctx.rotate(-Math.PI/2);ctx.fillText(energyUnitLabel,0,0);ctx.restore();
   ctx.font='9px "JetBrains Mono",monospace';
   for(let i=0;i<=5;i++){const h=totalH_min+(i/5)*(totalH_max-totalH_min);ctx.fillStyle='rgba(139,144,160,0.7)';ctx.fillText(h.toFixed(1),toX(h),PAD.t+gH+13);}
   ctx.textAlign='right';
@@ -149,7 +151,10 @@ export function drawEnergy() {
 
   // Title
   ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
-  ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm`, PAD.l, PAD.t-18);
+  const matTag = p.material === 'polyimide'
+    ? `  polyimide ${p.thicknessUm}\u00b5m (k_m=${k_m.toExponential(2)} k_v=${k_v.toExponential(2)})`
+    : '';
+  ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm${matTag}`, PAD.l, PAD.t-18);
   ctx.font='9px "JetBrains Mono",monospace'; ctx.textAlign='right';
   if (isBistable) { ctx.fillStyle='#4ade80'; ctx.fillText('BISTABLE — two energy wells', PAD.l+gW, PAD.t-18); }
   else            { ctx.fillStyle='rgba(139,144,160,0.7)'; ctx.fillText('monostable', PAD.l+gW, PAD.t-18); }
