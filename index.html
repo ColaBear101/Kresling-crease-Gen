@@ -42,6 +42,16 @@
         <select id="chir"><option value="1">Right-hand</option><option value="-1">Left-hand</option></select>
       </div>
 
+      <div class="sec-label">Material</div>
+      <div class="ctrl ctrl-select" style="padding:3px 4px" title="Drives the crease spring stiffness (k_m, k_v) used by the energy graph">
+        <label>Sheet material</label>
+        <select id="material">
+          <option value="generic">Generic (unmodeled)</option>
+          <option value="polyimide">Polyimide (Kapton-type)</option>
+        </select>
+      </div>
+      <div class="ctrl" title="Sheet thickness — only affects the energy graph when Sheet material = Polyimide"><label>Thickness (µm)</label><div class="ctrl-right"><input type="range" id="r-thick" min="6" max="125" step="0.5" value="50"><input class="num-inp" id="n-thick" type="number" min="6" max="125" step="0.5" value="50"></div></div>
+
       <div class="sec-label">Layout</div>
       <div class="ctrl"><label>End ext (cm)</label><div class="ctrl-right"><input type="range" id="r-ext" min="0" max="6" step="0.1" value="2"><input class="num-inp" id="n-ext" type="number" min="0" max="6" step="0.1" value="2"></div></div>
       <div class="ctrl"><label>Seam left (cm)</label><div class="ctrl-right"><input type="range" id="r-seaml" min="0" max="6" step="0.1" value="1.4"><input class="num-inp" id="n-seaml" type="number" min="0" max="6" step="0.1" value="1.4"></div></div>
