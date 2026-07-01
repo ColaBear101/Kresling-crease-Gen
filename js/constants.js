@@ -6,10 +6,11 @@ export const paramPairs = [
   ['r-angle','n-angle'],   ['r-ext','n-ext'],          ['r-seaml','n-seaml'], ['r-seamr','n-seamr'],
   ['r-extcols','n-extcols'],['r-stack','n-stack'],     ['r-scale','n-scale'], ['r-compress','n-compress'],
   ['r-wallmm','n-wallmm'], ['r-moldbase','n-moldbase'],['r-ridgeh','n-ridgeh'],['r-ridgew','n-ridgew'],
+  ['r-thick','n-thick'],
 ];
 
 export const PRESET_KEYS = [
-  'dia','height','n','floors','angle','ext','seaml','seamr','extcols','stack','scale','compress','wallmm',
+  'dia','height','n','floors','angle','ext','seaml','seamr','extcols','stack','scale','compress','wallmm','thick',
 ];
 
 export const PRESETS = {
