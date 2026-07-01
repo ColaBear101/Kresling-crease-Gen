@@ -15,6 +15,7 @@ export function captureState() {
     if (el) state[nid] = el.value;
   });
   state['chir'] = document.getElementById('chir').value;
+  state['material'] = document.getElementById('material').value;
   state['seam-auto-cb'] = document.getElementById('seam-auto-cb').checked;
 
   history = history.slice(0, historyIdx + 1);
@@ -31,6 +32,7 @@ function restoreState(state, draw) {
     if (r) r.value = state[nid]; if (n) n.value = state[nid];
   });
   if (state['chir'] !== undefined) document.getElementById('chir').value = state['chir'];
+  if (state['material'] !== undefined) document.getElementById('material').value = state['material'];
   if (state['seam-auto-cb'] !== undefined) {
     setSeamAutoMode(state['seam-auto-cb']);
     document.getElementById('seam-auto-cb').checked = state['seam-auto-cb'];
