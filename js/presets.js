@@ -27,6 +27,7 @@ export function exportPreset() {
     if (el) data[k] = parseFloat(el.value);
   });
   data.chir = parseInt(document.getElementById('chir').value);
+  data.material = document.getElementById('material').value;
   data.seamAuto = document.getElementById('seam-auto-cb').checked;
   data._version = 1;
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -54,6 +55,7 @@ export function handlePresetFile(input, { draw, applyAutoSeam }) {
         if (r) r.value = data[k]; if (n) n.value = data[k];
       });
       if (data.chir !== undefined) document.getElementById('chir').value = data.chir;
+      if (data.material !== undefined) document.getElementById('material').value = data.material;
       if (data.seamAuto !== undefined) {
         seamAutoMode = !!data.seamAuto;
         document.getElementById('seam-auto-cb').checked = seamAutoMode;
