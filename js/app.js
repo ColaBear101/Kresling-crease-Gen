@@ -198,6 +198,7 @@ function bindPairs() {
 
   ['showmv', 'showA4', 'showGrid'].forEach(id => document.getElementById(id).addEventListener('change', draw));
   document.getElementById('chir').addEventListener('change', () => { draw(); captureState(); });
+  document.getElementById('material').addEventListener('change', () => { draw(); captureState(); });
 }
 
 // ─── Sidebar / right-panel resize handles ────────────────────────────────────
