@@ -5,6 +5,7 @@ import { drawFlat, initFlatCanvasEvents } from './render-flat.js';
 import { init3d, draw3d } from './render-3d.js';
 import { initMold3d, drawMold3d } from './render-mold.js';
 import { drawEnergy, initEnergyEvents } from './energy.js';
+import { drawStiffness } from './stiffness.js';
 import { captureState, undo as _undo, redo as _redo } from './history.js';
 import {
   seamAutoMode, setSeamAutoMode, loadPreset as _loadPreset,
@@ -15,7 +16,7 @@ import { exportSVG, exportPNGA4, exportPDF, exportDXF, exportSTL, exportMoldSTL 
 import { ui, anim, cam3d, moldCam, flatCam } from './state.js';
 
 // ─── Top-level draw orchestration ────────────────────────────────────────────
-export function drawPanel() { draw3d(); drawEnergy(); }
+export function drawPanel() { draw3d(); drawEnergy(); drawStiffness(); }
 
 export function draw() {
   if (ui.currentCenterTab === 'crease') {
@@ -102,18 +103,26 @@ function switchMoldTab(tab) {
   drawMold3d();
 }
 
-// ─── Right-panel sub-panels (3D tube / energy) ───────────────────────────────
+// ─── Right-panel sub-panels (3D tube / energy / stiffness) ──────────────────
+const SUBPANELS = {
+  '3d':        { sp: 'sp3d',        btnTog: 'btn-tog-3d',        btnExp: 'btn-exp-3d',        wrap: 'wrap3d',        draw: () => { init3d(); draw3d(); } },
+  'energy':    { sp: 'spEnergy',    btnTog: 'btn-tog-energy',    btnExp: 'btn-exp-energy',    wrap: 'wrapEnergy',    draw: () => drawEnergy() },
+  'stiffness': { sp: 'spStiffness', btnTog: 'btn-tog-stiffness', btnExp: 'btn-exp-stiffness', wrap: 'wrapStiffness', draw: () => drawStiffness() },
+};
+
 function toggleSubPanel(which) {
-  const sp  = document.getElementById(which === '3d' ? 'sp3d' : 'spEnergy');
-  const btn = document.getElementById(which === '3d' ? 'btn-tog-3d' : 'btn-tog-energy');
+  const cfg = SUBPANELS[which];
+  const sp  = document.getElementById(cfg.sp);
+  const btn = document.getElementById(cfg.btnTog);
   const collapsed = sp.classList.toggle('collapsed');
   btn.textContent = collapsed ? '▶' : '▼';
-  if (!collapsed) { if (which === '3d') { init3d(); draw3d(); } else drawEnergy(); }
+  if (!collapsed) cfg.draw();
 }
 
 function expandSubPanel(which) {
-  const sp  = document.getElementById(which === '3d' ? 'sp3d' : 'spEnergy');
-  const btn = document.getElementById(which === '3d' ? 'btn-exp-3d' : 'btn-exp-energy');
+  const cfg = SUBPANELS[which];
+  const sp  = document.getElementById(cfg.sp);
+  const btn = document.getElementById(cfg.btnExp);
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
   if (fsEl === sp) {
     const exit = document.exitFullscreen || document.webkitExitFullscreen;
@@ -124,20 +133,19 @@ function expandSubPanel(which) {
   if (!req) return;
   req.call(sp).then(() => {
     btn.textContent = '✕';
-    const wrap = document.getElementById(which === '3d' ? 'wrap3d' : 'wrapEnergy');
-    const ro = new ResizeObserver(() => {
-      ro.disconnect();
-      if (which === '3d') { init3d(); draw3d(); } else drawEnergy();
-    });
+    const wrap = document.getElementById(cfg.wrap);
+    const ro = new ResizeObserver(() => { ro.disconnect(); cfg.draw(); });
     ro.observe(wrap);
   }).catch(() => {});
 }
 
 function _fsChange() {
   if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-    const b3 = document.getElementById('btn-exp-3d'), be = document.getElementById('btn-exp-energy');
-    if (b3) b3.textContent = '⛶'; if (be) be.textContent = '⛶';
-    setTimeout(() => { init3d(); draw3d(); drawEnergy(); }, 80);
+    Object.values(SUBPANELS).forEach(cfg => {
+      const b = document.getElementById(cfg.btnExp);
+      if (b) b.textContent = '⛶';
+    });
+    setTimeout(() => { init3d(); draw3d(); drawEnergy(); drawStiffness(); }, 80);
   }
 }
 
@@ -301,7 +309,7 @@ export function initApp() {
   window.addEventListener('resize', () => {
     if (ui.currentCenterTab === 'crease') drawFlat();
     else { initMold3d(); drawMold3d(); }
-    init3d(); draw3d(); drawEnergy();
+    init3d(); draw3d(); drawEnergy(); drawStiffness();
   });
 
   captureState(); // initial state for undo
