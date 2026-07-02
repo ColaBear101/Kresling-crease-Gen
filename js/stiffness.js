@@ -106,7 +106,4 @@ export function drawStiffness() {
   ctx.textAlign = 'left'; ctx.font = '10px "JetBrains Mono",monospace';
   ctx.fillStyle = '#e05252'; ctx.fillText(`k_m (mountain)  @ ${curT.toFixed(0)}\u00b5m = ${curR.k_m.toExponential(2)} N\u00b7cm/rad`, PAD.l, PAD.t - 20);
   ctx.fillStyle = '#3dba6e'; ctx.fillText(`k_v (valley)    @ ${curT.toFixed(0)}\u00b5m = ${curR.k_v.toExponential(2)} N\u00b7cm/rad`, PAD.l, PAD.t - 8);
-
-  ctx.fillStyle = 'rgba(139,144,160,0.55)'; ctx.font = '9px "JetBrains Mono",monospace'; ctx.textAlign = 'left';
-  ctx.fillText(`L,w fixed @ current geometry (n=${p.n}, floors=${p.floors})  \u2014  k \u221d thickness\u00b3, \u221d crease length`, PAD.l, H - 10);
 }
