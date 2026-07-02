@@ -146,14 +146,16 @@ export function drawEnergy() {
   ctx.fillStyle='#f87171';ctx.font='9px "JetBrains Mono",monospace';
   ctx.textAlign = cx2+80 > W-PAD.r ? 'right' : 'left';
   const tOff = cx2+80 > W-PAD.r ? -8 : 8;
-  ctx.fillText(`h=${curH.toFixed(2)}`, cx2+tOff, cy2-3);
-  ctx.fillText(`E=${curE.toFixed(4)}`, cx2+tOff, cy2+9);
+  const nearBottom = cy2 > PAD.t+gH-24;
+  const nearTop    = cy2 < PAD.t+20;
+  const y1 = nearBottom ? cy2-20 : nearTop ? cy2+14 : cy2-3;
+  const y2 = nearBottom ? cy2-8  : nearTop ? cy2+26 : cy2+9;
+  ctx.fillText(`h=${curH.toFixed(2)}`, cx2+tOff, y1);
+  ctx.fillText(`E=${curE.toFixed(4)}`, cx2+tOff, y2);
 
   // Title
   ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
-  const matTag = p.material === 'polyimide'
-    ? `  polyimide ${p.thicknessUm}\u00b5m (k_m=${k_m.toExponential(2)} k_v=${k_v.toExponential(2)})`
-    : '';
+  const matTag = p.material === 'polyimide' ? `  \u00b7 polyimide ${p.thicknessUm}\u00b5m` : '';
   ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm${matTag}`, PAD.l, PAD.t-18);
   ctx.font='9px "JetBrains Mono",monospace'; ctx.textAlign='right';
   if (isBistable) { ctx.fillStyle='#4ade80'; ctx.fillText('BISTABLE — two energy wells', PAD.l+gW, PAD.t-18); }
