@@ -121,7 +121,11 @@ export function draw3d() {
 
   ctx.fillStyle='rgba(139,144,160,0.7)'; ctx.font='10px "JetBrains Mono",monospace';
   ctx.textAlign='left';
-  ctx.fillText(`n=${n}  f=${totalFloors}  ⌀${(R*2).toFixed(1)}cm  h=${(totalFloors*eFH).toFixed(1)}cm`, 8, H-10);
+  const leftText = `n=${n}  f=${totalFloors}  ⌀${(R*2).toFixed(1)}cm  h=${(totalFloors*eFH).toFixed(1)}cm`;
+  ctx.fillText(leftText, 8, H-10);
+  const rightText = 'drag=rotate  scroll=zoom  dbl=reset';
+  const leftW = ctx.measureText(leftText).width;
   ctx.textAlign='right';
-  ctx.fillText('drag=rotate  scroll=zoom  dbl=reset', W-8, H-10);
+  const rightW = ctx.measureText(rightText).width;
+  if (8 + leftW + 16 + rightW < W) ctx.fillText(rightText, W-8, H-10);
 }
