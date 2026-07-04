@@ -1,5 +1,5 @@
 import { paramPairs } from './constants.js';
-import { getP, showToast, debounce } from './ui.js';
+import { getP, showToast, debounce, toggleSourcesModal } from './ui.js';
 import { computeGeometry, patternBounds } from './geometry.js';
 import { drawFlat, initFlatCanvasEvents } from './render-flat.js';
 import { init3d, draw3d } from './render-3d.js';
@@ -267,6 +267,7 @@ function initKeyboardShortcuts() {
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
+    if (e.key === 'Escape') { toggleSourcesModal(false); return; }
 
     const tag = document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
@@ -339,5 +340,6 @@ export function exposeGlobals() {
     autoFitA4, undo, redo, resetDefaults,
     switchCenterTab, switchMoldTab,
     toggleSubPanel, expandSubPanel, toggleAutoRotate,
+    toggleSourcesModal,
   });
 }

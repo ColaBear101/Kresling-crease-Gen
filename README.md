@@ -45,7 +45,10 @@ Crease geometry and the fold-energy model follow formulas from:
 
 - Alipour & Arghavani (2023) — exact 3D crease lengths and polygon side length
 - Masana & Daqaq (2019) — axial truss energy model for bistability
-- Fernandez et al. (2022) — additional geometric corrections
+- Schenk & Guest (2011) and Filipov, Tachi & Paulino, *PNAS* (2015) — crease rotational-stiffness formula used by the material model
+- DuPont™ Kapton® HN datasheet — E/ν constants for the Polyimide (Kapton-type) preset
+
+Full citations with DOIs are one click away via the **📖 Sources** button in the toolbar (`js/constants.js` → `SOURCES`, rendered by `js/ui.js` → `toggleSourcesModal`).
 
 ## Running locally
 

@@ -1,4 +1,4 @@
-import { A4_W, A4_H } from './constants.js';
+import { A4_W, A4_H, SOURCES } from './constants.js';
 import { patternBounds } from './geometry.js';
 
 // ─── DOM parameter readers ────────────────────────────────────────────────────
@@ -150,6 +150,27 @@ export function drawInfoBoxCanvas(ctx, toC, sc, x0, x1, gapHiCm, gapLoCm, p, g, 
 
 export function escSVG(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+export const escHTML = escSVG; // same three entities either way
+
+// ─── Sources / references modal ──────────────────────────────────────────────
+// Renders constants.js:SOURCES on first open so the list can never drift out
+// of sync with what the app actually cites. force=true/false shows/hides
+// explicitly; omitted, it toggles.
+export function toggleSourcesModal(force) {
+  const modal = document.getElementById('sourcesModal');
+  if (!modal) return;
+  const show = force !== undefined ? force : !modal.classList.contains('show');
+  if (show) {
+    const body = document.getElementById('sourcesBody');
+    body.innerHTML = SOURCES.map(s => `
+      <div class="src-item">
+        <span class="src-cite"><a href="${s.url}" target="_blank" rel="noopener noreferrer">${escHTML(s.cite)}</a></span>
+        <span class="src-use">Used for: ${escHTML(s.use)}</span>
+      </div>`).join('') + `
+      <div class="src-footer">Full implementation on <a href="https://github.com/ColaBear101/Kresling-crease-Gen" target="_blank" rel="noopener noreferrer">GitHub</a>.</div>`;
+  }
+  modal.classList.toggle('show', show);
 }
 
 export function infoBoxSVGText(p, g, bounds, CM, olX, orX, _unused, botYsvg, lastCreaseYsvg) {
