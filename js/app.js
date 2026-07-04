@@ -110,13 +110,28 @@ const SUBPANELS = {
   'stiffness': { sp: 'spStiffness', btnTog: 'btn-tog-stiffness', btnExp: 'btn-exp-stiffness', wrap: 'wrapStiffness', draw: () => drawStiffness() },
 };
 
+function redrawAllVisibleSubPanels() {
+  Object.values(SUBPANELS).forEach(c => {
+    if (!document.getElementById(c.sp).classList.contains('collapsed')) c.draw();
+  });
+}
+
 function toggleSubPanel(which) {
   const cfg = SUBPANELS[which];
   const sp  = document.getElementById(cfg.sp);
   const btn = document.getElementById(cfg.btnTog);
   const collapsed = sp.classList.toggle('collapsed');
   btn.textContent = collapsed ? '▶' : '▼';
-  if (!collapsed) cfg.draw();
+  // Toggling this panel's flex-basis reflows every sibling sharing flex:1 in
+  // the same animated transition, so their canvases need resizing/redrawing
+  // too — not just this one's, and not only when expanding.
+  redrawAllVisibleSubPanels();
+  function onEnd(e) {
+    if (e.target !== sp) return; // ignore bubbled events (e.g. the toggle chevron's own rotation transition)
+    sp.removeEventListener('transitionend', onEnd);
+    redrawAllVisibleSubPanels();
+  }
+  sp.addEventListener('transitionend', onEnd);
 }
 
 function expandSubPanel(which) {
