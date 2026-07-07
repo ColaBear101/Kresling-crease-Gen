@@ -58,10 +58,19 @@ export function drawFlat() {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#1a1d28'; ctx.fillRect(0, 0, W, H);
 
-  const { n, floors, extcols, stack, chir, scale, showA4, showGrid } = p;
+  const { n, floors, extcols, stack, chir, scale, showA4, showGrid,
+          showmv, showMountain, showValley, showDiagonal } = p;
   const { b, floor_h, dx } = g;
   const col_min     = -extcols, col_max = n + extcols, total_cols = col_max - col_min + 1;
   const totalFloors = floors * stack;
+  // Screen-only: "Show M/V colors" off swaps mountain/valley/diagonal to one
+  // neutral color; the toggles below hide/show each layer independently.
+  // Neither affects SVG/PDF/PNG/DXF/STL exports — those must always contain
+  // every crease line, since they're the physical pattern used to fold it.
+  const neutralCol = '#9aa0b0';
+  const mtnCol  = showmv ? '#e05252' : neutralCol;
+  const valCol  = showmv ? '#378ADD' : neutralCol;
+  const diagCol = showmv ? '#3dba6e' : neutralCol;
 
   // Base transform: A4 + margin fitted to canvas, then zoom/pan on top
   const margin_cm = 1.5;
@@ -134,35 +143,41 @@ export function drawFlat() {
   drawInfoBoxCanvas(ctx, toC, sc, x0, x1, y0, topY, p, g, bounds);
 
   // Red mountain zigzags
-  for (let ci = 1; ci < total_cols - 1; ci++) {
-    ctx.beginPath();
-    for (let f = 0; f <= totalFloors; f++) { const [vx,vy]=verts[f][ci],[cx,cy]=toC(vx,vy); f===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy); }
-    ctx.strokeStyle='#e05252'; ctx.lineWidth=1.2; ctx.setLineDash([]); ctx.stroke();
+  if (showMountain) {
+    for (let ci = 1; ci < total_cols - 1; ci++) {
+      ctx.beginPath();
+      for (let f = 0; f <= totalFloors; f++) { const [vx,vy]=verts[f][ci],[cx,cy]=toC(vx,vy); f===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy); }
+      ctx.strokeStyle=mtnCol; ctx.lineWidth=1.2; ctx.setLineDash([]); ctx.stroke();
+    }
+    const rPts = Array.from({length:totalFloors+1},(_,f)=>verts[f][orIdx]);
+    ctx.beginPath(); rPts.forEach(([vx,vy],i)=>{ const [cx,cy]=toC(vx,vy); i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy); });
+    ctx.strokeStyle=mtnCol; ctx.lineWidth=1.1; ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
+    const lPts = Array.from({length:totalFloors+1},(_,f)=>verts[f][olIdx]);
+    ctx.beginPath(); lPts.forEach(([vx,vy],i)=>{ const [cx,cy]=toC(vx,vy); i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy); });
+    ctx.strokeStyle=mtnCol; ctx.lineWidth=1.1; ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
   }
-  const rPts = Array.from({length:totalFloors+1},(_,f)=>verts[f][orIdx]);
-  ctx.beginPath(); rPts.forEach(([vx,vy],i)=>{ const [cx,cy]=toC(vx,vy); i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy); });
-  ctx.strokeStyle='#e05252'; ctx.lineWidth=1.1; ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
-  const lPts = Array.from({length:totalFloors+1},(_,f)=>verts[f][olIdx]);
-  ctx.beginPath(); lPts.forEach(([vx,vy],i)=>{ const [cx,cy]=toC(vx,vy); i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy); });
-  ctx.strokeStyle='#e05252'; ctx.lineWidth=1.1; ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
 
   // Blue valley horizontals
-  for (let f = 0; f <= totalFloors; f++) {
-    const yL=verts[f][0][1], [lx,ly]=toC(seamLX,yL), [rx,ry]=toC(seamRX,yL);
-    ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(rx,ry);
-    ctx.strokeStyle='#378ADD'; ctx.lineWidth=1.3; ctx.setLineDash([]); ctx.stroke();
+  if (showValley) {
+    for (let f = 0; f <= totalFloors; f++) {
+      const yL=verts[f][0][1], [lx,ly]=toC(seamLX,yL), [rx,ry]=toC(seamRX,yL);
+      ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(rx,ry);
+      ctx.strokeStyle=valCol; ctx.lineWidth=1.3; ctx.setLineDash([]); ctx.stroke();
+    }
   }
 
   // Green diagonal valley creases
-  ctx.strokeStyle='#3dba6e'; ctx.lineWidth=1.0; ctx.setLineDash([5,4]);
-  for (let f = 0; f < totalFloors; f++)
-    for (let ci = 0; ci < total_cols - 1; ci++) {
-      const v1=verts[f][ci],v2=verts[f+1][ci+1],v3=verts[f][ci+1],v4=verts[f+1][ci];
-      const [ax2,ay2,bx2,by2] = (f*chir)%2===0 ? [v3[0],v3[1],v4[0],v4[1]] : [v1[0],v1[1],v2[0],v2[1]];
-      const [px1,py1]=toC(ax2,ay2), [px2,py2]=toC(bx2,by2);
-      ctx.beginPath();ctx.moveTo(px1,py1);ctx.lineTo(px2,py2);ctx.stroke();
-    }
-  ctx.setLineDash([]);
+  if (showDiagonal) {
+    ctx.strokeStyle=diagCol; ctx.lineWidth=1.0; ctx.setLineDash([5,4]);
+    for (let f = 0; f < totalFloors; f++)
+      for (let ci = 0; ci < total_cols - 1; ci++) {
+        const v1=verts[f][ci],v2=verts[f+1][ci+1],v3=verts[f][ci+1],v4=verts[f+1][ci];
+        const [ax2,ay2,bx2,by2] = (f*chir)%2===0 ? [v3[0],v3[1],v4[0],v4[1]] : [v1[0],v1[1],v2[0],v2[1]];
+        const [px1,py1]=toC(ax2,ay2), [px2,py2]=toC(bx2,by2);
+        ctx.beginPath();ctx.moveTo(px1,py1);ctx.lineTo(px2,py2);ctx.stroke();
+      }
+    ctx.setLineDash([]);
+  }
 
   // Dimension labels
   ctx.save(); ctx.fillStyle='rgba(180,220,255,0.55)'; ctx.font='9px "JetBrains Mono",monospace';
