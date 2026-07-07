@@ -116,6 +116,25 @@ function redrawAllVisibleSubPanels() {
   });
 }
 
+// Complements the transitionend listener in toggleSubPanel below: that one
+// catches the start and end of a collapse/expand, this one keeps redrawing
+// continuously while the flex-basis animation is actually running, so there's
+// no visible stretch during the ~200ms transition either. rAF-coalesced so
+// a burst of ResizeObserver callbacks in one frame only triggers one redraw.
+function initSubPanelResizeObservers() {
+  if (!window.ResizeObserver) return;
+  let scheduled = false;
+  const scheduleRedraw = () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => { scheduled = false; redrawAllVisibleSubPanels(); });
+  };
+  Object.values(SUBPANELS).forEach(cfg => {
+    const wrap = document.getElementById(cfg.wrap);
+    if (wrap) new ResizeObserver(scheduleRedraw).observe(wrap);
+  });
+}
+
 function toggleSubPanel(which) {
   const cfg = SUBPANELS[which];
   const sp  = document.getElementById(cfg.sp);
@@ -219,7 +238,8 @@ function bindPairs() {
     captureState();
   });
 
-  ['showmv', 'showA4', 'showGrid'].forEach(id => document.getElementById(id).addEventListener('change', draw));
+  ['showmv', 'showA4', 'showGrid', 'showMountain', 'showValley', 'showDiagonal']
+    .forEach(id => document.getElementById(id).addEventListener('change', draw));
   document.getElementById('chir').addEventListener('change', () => { draw(); captureState(); });
   document.getElementById('material').addEventListener('change', () => { draw(); captureState(); });
 }
@@ -318,6 +338,7 @@ export function initApp() {
   initEnergyEvents();
   initKeyboardShortcuts();
   init3d();
+  initSubPanelResizeObservers();
 
   document.addEventListener('fullscreenchange', _fsChange);
   document.addEventListener('webkitfullscreenchange', _fsChange);
