@@ -147,13 +147,14 @@ export function exportDXF() {
   const topY=y0-extS,botY=y3+extS,seamLX=x0-seamlS,seamRX=x1+seamrS;
 
   const dL=(x1,y1,x2,y2,layer)=>`0\nLINE\n8\n${layer}\n10\n${x1.toFixed(4)}\n20\n${y1.toFixed(4)}\n30\n0\n11\n${x2.toFixed(4)}\n21\n${y2.toFixed(4)}\n31\n0\n`;
-  let e=dL(x0,topY,x0,botY,'CUT')+dL(x1,topY,x1,botY,'CUT')+dL(x0,topY,x1,topY,'CUT')+dL(x2,botY,x3,botY,'CUT');
-  for(let ci=1;ci<total_cols-1;ci++)for(let f=0;f<totalFloors;f++)e+=dL(verts[f][ci][0],verts[f][ci][1],verts[f+1][ci][0],verts[f+1][ci][1],'MOUNTAIN');
-  for(let f=0;f<=totalFloors;f++)e+=dL(seamLX,verts[f][0][1],seamRX,verts[f][0][1],'VALLEY');
+  const entities=[dL(x0,topY,x0,botY,'CUT'),dL(x1,topY,x1,botY,'CUT'),dL(x0,topY,x1,topY,'CUT'),dL(x2,botY,x3,botY,'CUT')];
+  for(let ci=1;ci<total_cols-1;ci++)for(let f=0;f<totalFloors;f++)entities.push(dL(verts[f][ci][0],verts[f][ci][1],verts[f+1][ci][0],verts[f+1][ci][1],'MOUNTAIN'));
+  for(let f=0;f<=totalFloors;f++)entities.push(dL(seamLX,verts[f][0][1],seamRX,verts[f][0][1],'VALLEY'));
   for(let f=0;f<totalFloors;f++)for(let ci=0;ci<total_cols-1;ci++){
     const v1=verts[f][ci],v2=verts[f+1][ci+1],v3=verts[f][ci+1],v4=verts[f+1][ci];
-    if((f*chir)%2===0)e+=dL(v3[0],v3[1],v4[0],v4[1],'VALLEY');else e+=dL(v1[0],v1[1],v2[0],v2[1],'VALLEY');
+    entities.push((f*chir)%2===0?dL(v3[0],v3[1],v4[0],v4[1],'VALLEY'):dL(v1[0],v1[1],v2[0],v2[1],'VALLEY'));
   }
+  const e=entities.join('');
   const dxf=`0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${e}0\nENDSEC\n0\nEOF\n`;
   _download(new Blob([dxf],{type:'application/dxf'}), `kresling_n${n}_f${floors}_s${stack}.dxf`);
 }
@@ -191,18 +192,19 @@ export function exportSTL() {
   const tri  =(v1,v2,v3)=>{const n=norm(cross(sub(v2,v1),sub(v3,v1)));const f=x=>x.toFixed(6);return `  facet normal ${n.map(f).join(' ')}\n    outer loop\n      vertex ${v1.map(f).join(' ')}\n      vertex ${v2.map(f).join(' ')}\n      vertex ${v3.map(f).join(' ')}\n    endloop\n  endfacet\n`;};
   const quad =(v1,v2,v3,v4)=>tri(v1,v2,v3)+tri(v1,v3,v4);
 
-  let stl = `solid kresling_hollow_n${n}_f${floors}\n`;
+  const parts = [`solid kresling_hollow_n${n}_f${floors}\n`];
   for(let f=0;f<totalFloors;f++)for(let k=0;k<n;k++){
     const k2=(k+1)%n,v1=outerRings[f][k],v2=outerRings[f][k2],v3=outerRings[f+1][k],v4=outerRings[f+1][k2];
-    if((f*chir)%2===0){stl+=tri(v1,v2,v3);stl+=tri(v2,v4,v3);}else{stl+=tri(v1,v2,v4);stl+=tri(v1,v4,v3);}
+    if((f*chir)%2===0){parts.push(tri(v1,v2,v3),tri(v2,v4,v3));}else{parts.push(tri(v1,v2,v4),tri(v1,v4,v3));}
   }
   for(let f=0;f<totalFloors;f++)for(let k=0;k<n;k++){
     const k2=(k+1)%n,v1=innerRings[f][k],v2=innerRings[f][k2],v3=innerRings[f+1][k],v4=innerRings[f+1][k2];
-    if((f*chir)%2===0){stl+=tri(v3,v2,v1);stl+=tri(v3,v4,v2);}else{stl+=tri(v4,v2,v1);stl+=tri(v3,v4,v1);}
+    if((f*chir)%2===0){parts.push(tri(v3,v2,v1),tri(v3,v4,v2));}else{parts.push(tri(v4,v2,v1),tri(v3,v4,v1));}
   }
-  for(let k=0;k<n;k++){const k2=(k+1)%n;stl+=quad(outerRings[0][k],innerRings[0][k],innerRings[0][k2],outerRings[0][k2]);}
-  for(let k=0;k<n;k++){const k2=(k+1)%n;stl+=quad(outerRings[totalFloors][k2],innerRings[totalFloors][k2],innerRings[totalFloors][k],outerRings[totalFloors][k]);}
-  stl += `endsolid kresling_hollow_n${n}_f${floors}\n`;
+  for(let k=0;k<n;k++){const k2=(k+1)%n;parts.push(quad(outerRings[0][k],innerRings[0][k],innerRings[0][k2],outerRings[0][k2]));}
+  for(let k=0;k<n;k++){const k2=(k+1)%n;parts.push(quad(outerRings[totalFloors][k2],innerRings[totalFloors][k2],innerRings[totalFloors][k],outerRings[totalFloors][k]));}
+  parts.push(`endsolid kresling_hollow_n${n}_f${floors}\n`);
+  const stl = parts.join('');
   _download(new Blob([stl],{type:'model/stl'}), `kresling_hollow_n${n}_f${floors}_s${stack}.stl`);
 }
 
@@ -231,16 +233,18 @@ export function exportMoldSTL(moldType) {
   const tri  =(v1,v2,v3)=>{const n=norm(cross(sub(v2,v1),sub(v3,v1)));const f=x=>x.toFixed(6);return `  facet normal ${n.map(f).join(' ')}\n    outer loop\n      vertex ${v1.map(f).join(' ')}\n      vertex ${v2.map(f).join(' ')}\n      vertex ${v3.map(f).join(' ')}\n    endloop\n  endfacet\n`;};
   const quad =(v1,v2,v3,v4)=>tri(v1,v2,v3)+tri(v1,v3,v4);
 
-  let stl = `solid kresling_${moldType}_mold_n${n}_f${floors}\n`;
+  const parts = [`solid kresling_${moldType}_mold_n${n}_f${floors}\n`];
 
   // Base plate
   const zBot=-baseT,zTop=0,bx0=plateX0,bx1=plateX1,by0=plateY0,by1=plateY1;
-  stl+=quad([bx0,by0,zBot],[bx1,by0,zBot],[bx1,by1,zBot],[bx0,by1,zBot]);
-  stl+=quad([bx0,by0,zTop],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by0,zTop]);
-  stl+=quad([bx0,by0,zBot],[bx0,by0,zTop],[bx0,by1,zTop],[bx0,by1,zBot]);
-  stl+=quad([bx1,by0,zTop],[bx1,by0,zBot],[bx1,by1,zBot],[bx1,by1,zTop]);
-  stl+=quad([bx0,by0,zTop],[bx0,by0,zBot],[bx1,by0,zBot],[bx1,by0,zTop]);
-  stl+=quad([bx0,by1,zBot],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by1,zBot]);
+  parts.push(
+    quad([bx0,by0,zBot],[bx1,by0,zBot],[bx1,by1,zBot],[bx0,by1,zBot]),
+    quad([bx0,by0,zTop],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by0,zTop]),
+    quad([bx0,by0,zBot],[bx0,by0,zTop],[bx0,by1,zTop],[bx0,by1,zBot]),
+    quad([bx1,by0,zTop],[bx1,by0,zBot],[bx1,by1,zBot],[bx1,by1,zTop]),
+    quad([bx0,by0,zTop],[bx0,by0,zBot],[bx1,by0,zBot],[bx1,by0,zTop]),
+    quad([bx0,by1,zBot],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by1,zBot]),
+  );
 
   function addRidge(ax,ay,bx_,by_,rH,rW){
     const ddx=bx_-ax,ddy=by_-ay,len=Math.hypot(ddx,ddy);
@@ -248,8 +252,7 @@ export function exportMoldSTL(moldType) {
     const tx=ddx/len,ty=ddy/len,nx_=-ty,ny_=tx,hw=rW/2;
     const AL=[ax-hw*nx_,ay-hw*ny_,0],AR=[ax+hw*nx_,ay+hw*ny_,0],AP=[ax,ay,rH];
     const BL=[bx_-hw*nx_,by_-hw*ny_,0],BR=[bx_+hw*nx_,by_+hw*ny_,0],BP=[bx_,by_,rH];
-    stl+=tri(AL,AP,AR);stl+=tri(BL,BR,BP);
-    stl+=quad(AL,BL,BP,AP);stl+=quad(AR,AP,BP,BR);
+    parts.push(tri(AL,AP,AR),tri(BL,BR,BP),quad(AL,BL,BP,AP),quad(AR,AP,BP,BR));
   }
 
   const mountainSegs=[];
@@ -271,7 +274,8 @@ export function exportMoldSTL(moldType) {
   addRidge(x0,topY,x0,botY,ridgeH*0.5,ridgeW*0.8);
   addRidge(x1,topY,x1,botY,ridgeH*0.5,ridgeW*0.8);
 
-  stl += `endsolid kresling_${moldType}_mold_n${n}_f${floors}\n`;
+  parts.push(`endsolid kresling_${moldType}_mold_n${n}_f${floors}\n`);
+  const stl = parts.join('');
   showToast(`${moldType} mold exported ✓`);
   _download(new Blob([stl],{type:'model/stl'}), `kresling_${moldType}_mold_n${n}_f${floors}_s${stack}.stl`);
 }
