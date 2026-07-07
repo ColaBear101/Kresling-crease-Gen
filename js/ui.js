@@ -27,6 +27,9 @@ export function getP() {
     chir:    parseInt(document.getElementById('chir').value),
     showA4:  getBool('showA4'),
     showGrid:getBool('showGrid'),
+    showMountain: getBool('showMountain'),
+    showValley:   getBool('showValley'),
+    showDiagonal: getBool('showDiagonal'),
     material:    document.getElementById('material').value,
     thicknessUm: getV('thick'),
   };
