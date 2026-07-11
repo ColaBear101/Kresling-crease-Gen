@@ -13,7 +13,7 @@ import {
   handlePresetFile as _handlePresetFile,
 } from './presets.js';
 import { exportSVG, exportPNGA4, exportPDF, exportDXF, exportSTL, exportMoldSTL } from './exports.js';
-import { ui, anim, cam3d, moldCam, flatCam } from './state.js';
+import { ui, anim, compressAnim, cam3d, moldCam, flatCam } from './state.js';
 
 // ─── Top-level draw orchestration ────────────────────────────────────────────
 export function drawPanel() { draw3d(); drawEnergy(); drawStiffness(); }
@@ -82,6 +82,46 @@ function stepAutoRotate() {
   draw3d();
   if (ui.currentCenterTab === 'mold') { moldCam.rotY += speed * dt; drawMold3d(); }
   anim.frame = requestAnimationFrame(stepAutoRotate);
+}
+
+// ─── Compress auto-animate ("breathing") ────────────────────────────────────
+const COMPRESS_ANIM_MAX    = 90;  // percent — stays just short of full/degenerate collapse
+const COMPRESS_ANIM_PERIOD = 5;   // seconds for one full 0 -> max -> 0 cycle
+
+function toggleCompressAnimate() {
+  compressAnim.active = !compressAnim.active;
+  const btn = document.getElementById('compress-anim-btn');
+  if (btn) {
+    btn.style.color       = compressAnim.active ? 'var(--accent2)' : '';
+    btn.style.borderColor = compressAnim.active ? 'var(--accent)'  : '';
+    btn.title = compressAnim.active ? 'Stop compression animation [C]' : 'Auto-animate compression [C]';
+  }
+  if (compressAnim.active) { compressAnim.lastTime = performance.now(); stepCompressAnimate(); }
+  else if (compressAnim.frame) { cancelAnimationFrame(compressAnim.frame); compressAnim.frame = null; }
+  showToast(compressAnim.active ? 'Compression animation on' : 'Compression animation off', 1400);
+}
+
+function stepCompressAnimate() {
+  if (!compressAnim.active) return;
+  const now = performance.now();
+  const dt  = Math.min((now - compressAnim.lastTime) / 1000, 0.1);
+  compressAnim.lastTime = now;
+  compressAnim.phase += (2 * Math.PI / COMPRESS_ANIM_PERIOD) * dt;
+  const val = Math.round(COMPRESS_ANIM_MAX * (1 - Math.cos(compressAnim.phase)) / 2);
+  const r = document.getElementById('r-compress'), n = document.getElementById('n-compress');
+  if (r) r.value = val;
+  if (n) n.value = val;
+  draw3d();
+  drawEnergy();
+  compressAnim.frame = requestAnimationFrame(stepCompressAnimate);
+}
+
+function stopCompressAnimate() {
+  if (!compressAnim.active) return;
+  compressAnim.active = false;
+  if (compressAnim.frame) { cancelAnimationFrame(compressAnim.frame); compressAnim.frame = null; }
+  const btn = document.getElementById('compress-anim-btn');
+  if (btn) { btn.style.color = ''; btn.style.borderColor = ''; btn.title = 'Auto-animate compression [C]'; }
 }
 
 // ─── Center tab system ────────────────────────────────────────────────────────
@@ -238,6 +278,11 @@ function bindPairs() {
     captureState();
   });
 
+  ['r-compress', 'n-compress'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    el.addEventListener('pointerdown', stopCompressAnimate);
+  });
+
   ['showmv', 'showA4', 'showGrid', 'showMountain', 'showValley', 'showDiagonal']
     .forEach(id => document.getElementById(id).addEventListener('change', draw));
   document.getElementById('chir').addEventListener('change', () => { draw(); captureState(); });
@@ -298,6 +343,7 @@ function initKeyboardShortcuts() {
       case 'f': e.preventDefault(); autoFitA4(); showToast('Auto-fit A4'); break;
       case 'r': e.preventDefault(); resetDefaults(); showToast('Reset to defaults'); break;
       case 'a': e.preventDefault(); toggleAutoRotate(); break;
+      case 'c': e.preventDefault(); toggleCompressAnimate(); break;
       case 'z': flatCam.zoom = Math.min(flatCam.zoom * 1.2, 20); drawFlat(); break;
       case 'x':
         flatCam.zoom = Math.max(flatCam.zoom / 1.2, 1);
@@ -360,7 +406,7 @@ export function exposeGlobals() {
     exportSVG, exportPNGA4, exportPDF, exportDXF, exportSTL, exportMoldSTL,
     autoFitA4, undo, redo, resetDefaults,
     switchCenterTab, switchMoldTab,
-    toggleSubPanel, expandSubPanel, toggleAutoRotate,
+    toggleSubPanel, expandSubPanel, toggleAutoRotate, toggleCompressAnimate,
     toggleSourcesModal,
   });
 }
