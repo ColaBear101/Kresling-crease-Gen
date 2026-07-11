@@ -2,16 +2,16 @@ import { A4_W, A4_H } from './constants.js';
 
 // ─── Core geometry ───────────────────────────────────────────────────────────
 export function computeGeometry(p) {
-  const { dia, height, n, floors, stack, angle } = p;
+  const { dia, height, n, floors, stack, angle, chir } = p;
   const R        = dia / 2;
   const b        = (dia * Math.PI) / n;
   const floor_h  = height / floors;
   const theta    = angle * Math.PI / 180;
   const dx       = floor_h / Math.tan(theta);
-  const red_len  = Math.hypot(dx, floor_h);
-  const green_dx = b + 2 * dx;
+  const red_len  = Math.hypot(2 * dx, floor_h);
+  const green_dx = 2 * dx * chir - b;
   const green_len = Math.hypot(green_dx, floor_h);
-  const vg = [green_dx, floor_h], vr = [dx, floor_h];
+  const vg = [green_dx, floor_h], vr = [2 * dx * chir, floor_h];
   const gr_angle = Math.acos(
     Math.max(-1, Math.min(1, (vg[0]*vr[0] + vg[1]*vr[1]) / (Math.hypot(...vg) * Math.hypot(...vr))))
   ) * 180 / Math.PI;
