@@ -32,3 +32,11 @@ export const anim = {
   frame:      null,   // requestAnimationFrame handle
   lastTime:   0,
 };
+
+// Compression "breathing" auto-animate
+export const compressAnim = {
+  active:    false,
+  frame:     null,
+  lastTime:  0,
+  phase:     0,        // radians, continuous so pause/resume doesn't jump
+};
