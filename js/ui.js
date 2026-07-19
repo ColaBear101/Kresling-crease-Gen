@@ -64,7 +64,9 @@ export function updateStats(p, g) {
   document.getElementById('s-pw').textContent    = bounds.w.toFixed(2)    + ' cm';
   document.getElementById('s-ph').textContent    = bounds.h.toFixed(2)    + ' cm';
   document.getElementById('s-h0r').textContent   = g.h0r.toFixed(4);
-  document.getElementById('s-bi').textContent    = g.bistable ? '✓ Yes' : '✗ No';
+  const biEl = document.getElementById('s-bi');
+  biEl.textContent = g.bistable ? '✓ Yes' : '✗ No';
+  biEl.title = `Geometry length ratio (red_len/side) = ${g.bLengthRatio.toFixed(3)} — bistable requires 1 < ratio < ${g.bistableMax.toFixed(3)} [Cai et al. 2015]`;
   document.getElementById('s-scale').textContent = (p.scale * 100).toFixed(0) + '%';
   document.getElementById('s-fit').textContent   = fits
     ? `✓ ${fitW}%W ${fitH}%H` : `✗ ${fitW}%W ${fitH}%H`;
@@ -108,7 +110,7 @@ export function infoBoxLines(p, g, bounds) {
     `Blue-Red Angle: ${p.angle.toFixed(1)}\u00b0`,
     `Green-Red angle: ${g.gr_angle.toFixed(2)}\u00b0`,
     `h0/R: ${g.h0r.toFixed(4)}`,
-    `Bistable: ${g.bistable ? 'yes' : 'no'}`,
+    `Bistable: ${g.bistable ? 'yes' : 'no'} (b/a=${g.bLengthRatio.toFixed(3)}, 1<b/a<${g.bistableMax.toFixed(2)})`,
   ];
   const right = [
     `Diameter: ${p.dia.toFixed(2)} cm`,
