@@ -16,8 +16,28 @@ export function computeGeometry(p) {
     Math.max(-1, Math.min(1, (vg[0]*vr[0] + vg[1]*vr[1]) / (Math.hypot(...vg) * Math.hypot(...vr))))
   ) * 180 / Math.PI;
   const h0r      = floor_h / R;
-  const bistable = h0r > 0 && h0r < 2 * Math.sin(Math.PI / n) && dx > 0 && dx < b;
-  const valid    = dx < b && floor_h > 0 && b > 0;
+  // dx's sign only encodes which way theta sits relative to 90°; the fold
+  // direction itself is carried separately by `chir`. The overlap/validity
+  // check is about magnitude vs. the side length, so use |dx| — a signed
+  // `dx > 0`/`dx < b` guard was silently failing for every obtuse angle
+  // (theta > 90°, e.g. the 100°-120° defaults used by every stock preset).
+  const valid    = Math.abs(dx) < b && floor_h > 0 && b > 0;
+
+  // ─── Bistability (Cai, Deng, Zhou, Feng & Tu, J. Mech. Des. 137, 061406 (2015)) ──
+  // The paper models each Kresling element as a truss: the polygon side "a"
+  // (= this app's `b`) and the mountain crease "b" (= `red_len`) are held
+  // fixed while the diagonal "c" (= `green_len`) does all the straining as
+  // the element rotates from folded (δ=0) to deployed. Sweeping that single
+  // free angle δ, they show the strain energy has two zero-strain wells
+  // — i.e. the element is bistable — iff the "geometry length ratio" b/a
+  // (mountain-crease length ÷ side length) satisfies
+  //   1  <  red_len / b  <  1 / sin(π/n)
+  // The upper bound is the same self-overlap limit already enforced by
+  // `valid` (dx < b, eq. 18 in the paper); the lower bound is the point
+  // below which the two energy wells merge into one (monostable, flat).
+  const bLengthRatio = red_len / b;
+  const bistableMax  = 1 / Math.sin(Math.PI / n);
+  const bistable = bLengthRatio > 1 && bLengthRatio < bistableMax && Math.abs(dx) > 0 && Math.abs(dx) < b;
 
   // ─── Theoretical extend / fold limits ──────────────────────────────────────
   // Model: the mountain (red) crease is the inextensible constraint that ties
@@ -47,6 +67,7 @@ export function computeGeometry(p) {
   return {
     b, floor_h, dx, red_len, green_len, gr_angle, h0r, bistable, valid, R, green_dx,
     extendLen, foldLen, foldDx, foldInnerDia, foldInnerValid,
+    bLengthRatio, bistableMax,
   };
 }
 
