@@ -16,7 +16,7 @@ export const PRESET_KEYS = [
 export const PRESETS = {
   bistable6:  {dia:4,   height:16, n:6,  floors:8,  angle:105, ext:1.5, seaml:1.57, seamr:1.57, extcols:1, stack:1, scale:100, compress:0, wallmm:0.8},
   bistable8:  {dia:5,   height:20, n:8,  floors:10, angle:100, ext:2,   seaml:1.96, seamr:1.96, extcols:1, stack:1, scale:100, compress:0, wallmm:0.8},
-  monostable: {dia:3,   height:12, n:6,  floors:6,  angle:120, ext:1,   seaml:0,    seamr:0,    extcols:0, stack:1, scale:100, compress:0, wallmm:0.8},
+  monostable: {dia:3,   height:24, n:6,  floors:6,  angle:100, ext:1,   seaml:0,    seamr:0,    extcols:0, stack:1, scale:100, compress:0, wallmm:0.8},
   tower:      {dia:2.5, height:30, n:6,  floors:16, angle:95,  ext:1.5, seaml:1.31, seamr:1.31, extcols:1, stack:2, scale:80,  compress:0, wallmm:0.8},
   flat:       {dia:8,   height:8,  n:12, floors:4,  angle:90,  ext:1,   seaml:0,    seamr:0,    extcols:0, stack:1, scale:60,  compress:0, wallmm:0.8},
   compact:    {dia:3,   height:6,  n:5,  floors:4,  angle:110, ext:1,   seaml:1.88, seamr:1.88, extcols:1, stack:1, scale:100, compress:0, wallmm:0.8},
@@ -55,5 +55,10 @@ export const SOURCES = [
     cite: 'DuPont™ Kapton® HN polyimide film — Technical Data Sheet (ASTM D-882 / D-5213).',
     url:  'https://www.beta.dupont.com/content/dam/electronics/amer/us/en/electronics/public/documents/en/EI-10206-Kapton-HN-Data-Sheet.pdf',
     use:  'E ≈ 2.5 GPa, ν = 0.34 material constants for the Polyimide (Kapton-type) preset',
+  },
+  {
+    cite: 'Cai, J., Deng, X., Zhou, Y., Feng, J., & Tu, Y. (2015). Bistable behavior of the cylindrical origami structure with Kresling pattern. Journal of Mechanical Design, 137(6), 061406.',
+    url:  'https://doi.org/10.1115/1.4030158',
+    use:  'Closed-form bistability criterion 1 < red_len/side < 1/sin(π/n), replacing the previous ad-hoc h0/R heuristic in geometry.js',
   },
 ];
