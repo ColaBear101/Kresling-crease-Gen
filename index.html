@@ -184,6 +184,18 @@
           <canvas id="canvasStiffness"></canvas>
         </div>
       </div>
+
+      <!-- Modal frequencies sub-panel -->
+      <div class="sub-panel collapsed" id="spModal">
+        <div class="sub-panel-header" title="6-DOF linearized truss model (Kidambi & Wang 2020): axial vs. off-axis vibration modes of the two stable branches, swept over the stress-free twist angle δ0 at the current n, R0. See Sources for the full model.">
+          <button class="sub-toggle" id="btn-tog-modal" onclick="toggleSubPanel('modal')">▶</button>
+          <span class="sub-panel-title">Modal frequencies (axial / off-axis)</span>
+          <button class="sub-expand" id="btn-exp-modal" onclick="expandSubPanel('modal')" title="Fullscreen">⛶</button>
+        </div>
+        <div class="sub-canvas-wrap" id="wrapModal">
+          <canvas id="canvasModal"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 
