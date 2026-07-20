@@ -85,8 +85,18 @@ export function drawEnergy() {
       forcePoints.push(F);
       if (F < minF) minF = F; if (F > maxF) maxF = F;
     }
-    const span = Math.max(Math.abs(minF), Math.abs(maxF), 1e-6);
-    minF = -span * 1.08; maxF = span * 1.08; // symmetric about 0, matches sign convention
+    // Robust axis scaling: dE/dh genuinely diverges as h approaches the
+    // crease-inextensibility limits (h -> h_min or h -> h_max) — that's a
+    // real feature of the model (the underlying energy has a steep but
+    // visually tiny uptick there, invisible on the 0..maxE scale), not a
+    // bug. But it's not representative of any realistic operating range,
+    // and letting it set the axis scale crushes the physically meaningful
+    // region near the stable state into an unreadable sliver. Base the
+    // visible range on the 92nd percentile of |F| instead, and let the
+    // curve clip off the top/bottom near the edges.
+    const sortedAbsF = forcePoints.map(Math.abs).slice().sort((a,b)=>a-b);
+    const robustSpan = Math.max(sortedAbsF[Math.floor(sortedAbsF.length*0.92)], 1e-6);
+    minF = -robustSpan * 1.15; maxF = robustSpan * 1.15;
   }
 
   // Find local minima
@@ -156,7 +166,11 @@ export function drawEnergy() {
 
   if (showForce) {
     ctx.beginPath();
-    for(let i=0;i<=STEPS;i++){const x=toX(heightPoints[i]),y=toY2(forcePoints[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    for(let i=0;i<=STEPS;i++){
+      const Fc = Math.max(minF, Math.min(maxF, forcePoints[i]));
+      const x=toX(heightPoints[i]), y=toY2(Fc);
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
     ctx.strokeStyle='#f59e0b';ctx.lineWidth=1.6;ctx.setLineDash([3,2]);ctx.stroke();ctx.setLineDash([]);
   }
 
@@ -202,7 +216,7 @@ export function drawEnergy() {
   if (isBistable) { ctx.fillStyle='#4ade80'; ctx.fillText('BISTABLE — two energy wells', PAD.l+gW, PAD.t-18); }
   else            { ctx.fillStyle='rgba(139,144,160,0.7)'; ctx.fillText('monostable', PAD.l+gW, PAD.t-18); }
   if (showForce) {
-    ctx.fillStyle='#f59e0b'; ctx.fillText('- - - Force (N, right axis)', PAD.l+gW, PAD.t-6);
+    ctx.fillStyle='#f59e0b'; ctx.fillText('- - - Force (N, right axis, clipped near limits)', PAD.l+gW, PAD.t-6);
   } else {
     ctx.fillStyle='rgba(245,158,11,0.55)'; ctx.fillText('Set material=Polyimide for Force (N)', PAD.l+gW, PAD.t-6);
   }
