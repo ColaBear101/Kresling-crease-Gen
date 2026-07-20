@@ -68,6 +68,27 @@ export function drawEnergy() {
     if (E < minE) minE = E; if (E > maxE) maxE = E;
   }
 
+  // Quasi-static force needed to hold/drive the tube at height h: by the
+  // principle of virtual work, F(h) = dE/dh along the deployment path. Only
+  // meaningful in real Newtons when material=polyimide (k_m,k_v in N·cm/rad
+  // from material.js); the generic material's k_m=2.0,k_v=1.0 are arbitrary
+  // units, so a "force" derived from them wouldn't be physically real.
+  const showForce = p.material === 'polyimide';
+  const forcePoints = [];
+  let minF = Infinity, maxF = -Infinity;
+  if (showForce) {
+    for (let i = 0; i <= STEPS; i++) {
+      const i0 = Math.max(0, i-1), i1 = Math.min(STEPS, i+1);
+      const dE = energyPoints[i1] - energyPoints[i0];
+      const dh = heightPoints[i1] - heightPoints[i0];
+      const F = dh !== 0 ? dE/dh : 0;
+      forcePoints.push(F);
+      if (F < minF) minF = F; if (F > maxF) maxF = F;
+    }
+    const span = Math.max(Math.abs(minF), Math.abs(maxF), 1e-6);
+    minF = -span * 1.08; maxF = span * 1.08; // symmetric about 0, matches sign convention
+  }
+
   // Find local minima
   const WINDOW = 8;
   const localMinima = [];
@@ -88,11 +109,12 @@ export function drawEnergy() {
   const isBistable  = mergedMinima.length >= 1 && (endpointMinima.length >= 1 || mergedMinima.length >= 2) && g.bistable;
 
   // Layout
-  const PAD = { l:52, r:16, t:36, b:48 };
+  const PAD = { l:52, r: showForce ? 46 : 16, t:40, b:48 };
   const gW = W-PAD.l-PAD.r, gH = H-PAD.t-PAD.b;
   const totalH_max = heightPoints[STEPS], totalH_min = heightPoints[0];
   function toX(h) { return PAD.l + (h-totalH_min)/(totalH_max-totalH_min+1e-9)*gW; }
   function toY(E) { return PAD.t + gH - (E-minE)/(maxE-minE+1e-9)*gH; }
+  function toY2(F) { return PAD.t + gH - (F-minF)/(maxF-minF+1e-9)*gH; }
 
   // Grid
   ctx.strokeStyle='rgba(59,130,246,0.1)'; ctx.lineWidth=0.5;
@@ -112,6 +134,17 @@ export function drawEnergy() {
   ctx.textAlign='right';
   for(let i=0;i<=4;i++){const E=minE+(1-i/4)*(maxE-minE);const y=PAD.t+(i/4)*gH;ctx.fillStyle='rgba(139,144,160,0.6)';ctx.fillText(E.toFixed(3),PAD.l-4,y+3);}
 
+  if (showForce) {
+    ctx.strokeStyle='rgba(180,200,255,0.45)'; ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(PAD.l+gW,PAD.t);ctx.lineTo(PAD.l+gW,PAD.t+gH);ctx.stroke();
+    ctx.textAlign='left'; ctx.font='9px "JetBrains Mono",monospace';
+    for(let i=0;i<=4;i++){const F=minF+(1-i/4)*(maxF-minF);const y=PAD.t+(i/4)*gH;ctx.fillStyle='rgba(245,158,11,0.75)';ctx.fillText(F.toFixed(2),PAD.l+gW+4,y+3);}
+    ctx.save();ctx.translate(W-8,PAD.t+gH/2);ctx.rotate(Math.PI/2);ctx.textAlign='center';ctx.font='10px "JetBrains Mono",monospace';ctx.fillStyle='rgba(245,158,11,0.85)';ctx.fillText('Force (N)',0,0);ctx.restore();
+    // Zero-force reference line
+    const y0 = toY2(0);
+    ctx.beginPath();ctx.moveTo(PAD.l,y0);ctx.lineTo(PAD.l+gW,y0);ctx.strokeStyle='rgba(245,158,11,0.15)';ctx.lineWidth=0.8;ctx.setLineDash([2,3]);ctx.stroke();ctx.setLineDash([]);
+  }
+
   // Fill + curve
   ctx.beginPath();ctx.moveTo(toX(heightPoints[0]),PAD.t+gH);
   for(let i=0;i<=STEPS;i++)ctx.lineTo(toX(heightPoints[i]),toY(energyPoints[i]));
@@ -120,6 +153,12 @@ export function drawEnergy() {
   ctx.beginPath();
   for(let i=0;i<=STEPS;i++){const x=toX(heightPoints[i]),y=toY(energyPoints[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
   ctx.strokeStyle='#378ADD';ctx.lineWidth=2;ctx.setLineDash([]);ctx.stroke();
+
+  if (showForce) {
+    ctx.beginPath();
+    for(let i=0;i<=STEPS;i++){const x=toX(heightPoints[i]),y=toY2(forcePoints[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.strokeStyle='#f59e0b';ctx.lineWidth=1.6;ctx.setLineDash([3,2]);ctx.stroke();ctx.setLineDash([]);
+  }
 
   // Designed-state marker
   const designedH = floor_h * totalFloors;
@@ -141,17 +180,19 @@ export function drawEnergy() {
   const curH    = (1-p.compress)*(designedH - h_min*totalFloors) + h_min*totalFloors;
   const curIdx  = Math.max(0,Math.min(STEPS,Math.round((curH-totalH_min)/(totalH_max-totalH_min)*STEPS)));
   const curE    = energyPoints[curIdx];
+  const curF    = showForce ? forcePoints[curIdx] : null;
   const cx2=toX(curH), cy2=toY(curE);
   ctx.beginPath();ctx.arc(cx2,cy2,6,0,Math.PI*2);ctx.fillStyle='#ef4444';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
   ctx.fillStyle='#f87171';ctx.font='9px "JetBrains Mono",monospace';
   ctx.textAlign = cx2+80 > W-PAD.r ? 'right' : 'left';
   const tOff = cx2+80 > W-PAD.r ? -8 : 8;
+  const curLines = [`h=${curH.toFixed(2)}`, `E=${curE.toFixed(4)}`];
+  if (showForce) curLines.push(`F=${curF.toFixed(3)}N`);
   const nearBottom = cy2 > PAD.t+gH-24;
   const nearTop    = cy2 < PAD.t+20;
-  const y1 = nearBottom ? cy2-20 : nearTop ? cy2+14 : cy2-3;
-  const y2 = nearBottom ? cy2-8  : nearTop ? cy2+26 : cy2+9;
-  ctx.fillText(`h=${curH.toFixed(2)}`, cx2+tOff, y1);
-  ctx.fillText(`E=${curE.toFixed(4)}`, cx2+tOff, y2);
+  const lineH = 12;
+  const yStart = nearBottom ? cy2 - 8 - (curLines.length-1)*lineH : nearTop ? cy2 + 14 : cy2 - 3 - ((curLines.length-2)*lineH)/2;
+  curLines.forEach((l,i) => ctx.fillText(l, cx2+tOff, yStart + i*lineH));
 
   // Title
   ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
@@ -160,6 +201,11 @@ export function drawEnergy() {
   ctx.font='9px "JetBrains Mono",monospace'; ctx.textAlign='right';
   if (isBistable) { ctx.fillStyle='#4ade80'; ctx.fillText('BISTABLE — two energy wells', PAD.l+gW, PAD.t-18); }
   else            { ctx.fillStyle='rgba(139,144,160,0.7)'; ctx.fillText('monostable', PAD.l+gW, PAD.t-18); }
+  if (showForce) {
+    ctx.fillStyle='#f59e0b'; ctx.fillText('- - - Force (N, right axis)', PAD.l+gW, PAD.t-6);
+  } else {
+    ctx.fillStyle='rgba(245,158,11,0.55)'; ctx.fillText('Set material=Polyimide for Force (N)', PAD.l+gW, PAD.t-6);
+  }
 
   // Hover crosshair
   if (ui.energyHoverX !== null) {
@@ -176,6 +222,7 @@ export function drawEnergy() {
       ctx.setLineDash([]);
       ctx.beginPath();ctx.arc(hx,hy,4,0,Math.PI*2);ctx.fillStyle='#facc15';ctx.fill();ctx.strokeStyle='#1a1d28';ctx.lineWidth=1.5;ctx.stroke();
       const tipLines=[`h = ${hoverHActual.toFixed(3)} cm`,`E = ${hoverE.toFixed(5)}`,`h/H = ${(hoverHActual/designedH).toFixed(3)}`];
+      if (showForce) tipLines.push(`F = ${forcePoints[clampIdx].toFixed(4)} N`);
       const tfs=9,tlh=tfs+3,tPad=6,tW=120,tH=tipLines.length*tlh+tPad*2;
       let tx=hx+10,ty=hy-tH/2;
       if(tx+tW>PAD.l+gW)tx=hx-tW-10;
