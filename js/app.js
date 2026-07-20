@@ -6,6 +6,7 @@ import { init3d, draw3d } from './render-3d.js';
 import { initMold3d, drawMold3d } from './render-mold.js';
 import { drawEnergy, initEnergyEvents } from './energy.js';
 import { drawStiffness } from './stiffness.js';
+import { drawModal } from './modal.js';
 import { captureState, undo as _undo, redo as _redo } from './history.js';
 import {
   seamAutoMode, setSeamAutoMode, loadPreset as _loadPreset,
@@ -28,6 +29,14 @@ export function draw() {
 }
 
 const drawEnergyDebounced = debounce(() => drawEnergy(), 120);
+// drawModal() runs a full numeric eigenvalue sweep (~tens of ms per δ0 sample,
+// dozens of samples) — too slow to call on every drag tick like the other
+// panels. Debounce it more aggressively and skip entirely while collapsed.
+function drawModalIfVisible() {
+  const sp = document.getElementById('spModal');
+  if (sp && !sp.classList.contains('collapsed')) drawModal();
+}
+const drawModalDebounced = debounce(() => drawModalIfVisible(), 500);
 
 // ─── Auto-seam ────────────────────────────────────────────────────────────────
 function computeAutoSeam(p, g) {
@@ -148,6 +157,7 @@ const SUBPANELS = {
   '3d':        { sp: 'sp3d',        btnTog: 'btn-tog-3d',        btnExp: 'btn-exp-3d',        wrap: 'wrap3d',        draw: () => { init3d(); draw3d(); } },
   'energy':    { sp: 'spEnergy',    btnTog: 'btn-tog-energy',    btnExp: 'btn-exp-energy',    wrap: 'wrapEnergy',    draw: () => drawEnergy() },
   'stiffness': { sp: 'spStiffness', btnTog: 'btn-tog-stiffness', btnExp: 'btn-exp-stiffness', wrap: 'wrapStiffness', draw: () => drawStiffness() },
+  'modal':     { sp: 'spModal',     btnTog: 'btn-tog-modal',     btnExp: 'btn-exp-modal',     wrap: 'wrapModal',     draw: () => drawModal() },
 };
 
 function redrawAllVisibleSubPanels() {
@@ -219,7 +229,7 @@ function _fsChange() {
       const b = document.getElementById(cfg.btnExp);
       if (b) b.textContent = '⛶';
     });
-    setTimeout(() => { init3d(); draw3d(); drawEnergy(); drawStiffness(); }, 80);
+    setTimeout(() => { init3d(); draw3d(); drawEnergy(); drawStiffness(); drawModalIfVisible(); }, 80);
   }
 }
 
@@ -252,13 +262,13 @@ function resetDefaults() {
 function bindPairs() {
   paramPairs.forEach(([rid, nid]) => {
     const r = document.getElementById(rid), n = document.getElementById(nid);
-    r.addEventListener('input', () => { n.value = parseFloat(r.value); applyAutoSeam(); draw(); drawEnergyDebounced(); });
+    r.addEventListener('input', () => { n.value = parseFloat(r.value); applyAutoSeam(); draw(); drawEnergyDebounced(); drawModalDebounced(); });
     r.addEventListener('change', () => captureState());
     n.addEventListener('input', () => {
       let v = parseFloat(n.value);
       const mn = parseFloat(r.min), mx = parseFloat(r.max);
       if (!isNaN(mn) && v < mn) v = mn; if (!isNaN(mx) && v > mx) v = mx;
-      r.value = v; n.value = v; applyAutoSeam(); draw(); drawEnergyDebounced();
+      r.value = v; n.value = v; applyAutoSeam(); draw(); drawEnergyDebounced(); drawModalDebounced();
     });
     n.addEventListener('change', () => captureState());
     n.addEventListener('keydown', e => { if (e.key === 'Enter') { n.blur(); captureState(); } });
@@ -392,7 +402,7 @@ export function initApp() {
   window.addEventListener('resize', () => {
     if (ui.currentCenterTab === 'crease') drawFlat();
     else { initMold3d(); drawMold3d(); }
-    init3d(); draw3d(); drawEnergy(); drawStiffness();
+    init3d(); draw3d(); drawEnergy(); drawStiffness(); drawModalIfVisible();
   });
 
   captureState(); // initial state for undo
