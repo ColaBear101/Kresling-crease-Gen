@@ -277,6 +277,41 @@ function snapToBistable() {
   showToast(`Angle \u2192 ${best.toFixed(1)}\u00b0 \u2014 b/a=${bestG.bLengthRatio.toFixed(3)}, ${verdict}`, 3200);
 }
 
+// Adjusts Angle BR to a monostable point: outside the Cai et al. (2015)
+// window (ratio <= 1 or >= 1/sin(pi/n)), preferring whichever valid point is
+// closest to angle=90 (dx=0, the natural zero-twist / least-contorted
+// configuration) with at least a small safety margin from the boundary, so
+// it doesn't land right on the edge of turning bistable.
+function snapToMonostable() {
+  const p = getP();
+  const rEl = document.getElementById('r-angle'), nEl = document.getElementById('n-angle');
+  const angMin = parseFloat(rEl.min), angMax = parseFloat(rEl.max);
+  const STEPS = 1600;
+  const candidates = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const angle = angMin + (angMax - angMin) * i / STEPS;
+    const g = computeGeometry({ ...p, angle });
+    if (!g.valid) continue;
+    const below = g.bLengthRatio <= 1, above = g.bLengthRatio >= g.bistableMax;
+    if (!below && !above) continue; // inside the bistable window
+    const margin = below ? (1 - g.bLengthRatio) : (g.bLengthRatio - g.bistableMax);
+    candidates.push({ angle, g, margin });
+  }
+  if (!candidates.length) {
+    showToast('No monostable angle found in range \u2014 try changing dia/n/floors/height', 3000);
+    return;
+  }
+  const SAFE_MARGIN = 0.05;
+  const safe = candidates.filter(c => c.margin >= SAFE_MARGIN);
+  const pool = safe.length ? safe : candidates;
+  let best = pool[0];
+  for (const c of pool) if (Math.abs(c.angle - 90) < Math.abs(best.angle - 90)) best = c;
+  rEl.value = best.angle.toFixed(1); nEl.value = best.angle.toFixed(1);
+  applyAutoSeam(); draw(); drawEnergyDebounced(); drawModalDebounced(); captureState();
+  const note = safe.length ? '' : ' (marginal \u2014 close to the bistable boundary)';
+  showToast(`Angle \u2192 ${best.angle.toFixed(1)}\u00b0 \u2014 b/a=${best.g.bLengthRatio.toFixed(3)}, monostable${note}`, 3200);
+}
+
 function resetDefaults() {
   const defs = { dia:3, height:20, n:6, floors:10, angle:100, ext:2, seaml:1.4, seamr:0, extcols:1, stack:1, scale:100, compress:0, wallmm:0.8 };
   Object.entries(defs).forEach(([k, v]) => {
@@ -444,7 +479,7 @@ export function exposeGlobals() {
   Object.assign(window, {
     loadPreset, exportPreset, importPreset, handlePresetFile,
     exportSVG, exportPNGA4, exportPDF, exportDXF, exportSTL, exportMoldSTL,
-    autoFitA4, undo, redo, resetDefaults, snapToBistable,
+    autoFitA4, undo, redo, resetDefaults, snapToBistable, snapToMonostable,
     switchCenterTab, switchMoldTab,
     toggleSubPanel, expandSubPanel, toggleAutoRotate, toggleCompressAnimate,
     toggleSourcesModal,
