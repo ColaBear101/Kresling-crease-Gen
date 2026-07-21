@@ -247,6 +247,36 @@ function autoFitA4() {
   draw();
 }
 
+// Adjusts Angle BR to the middle of the Cai et al. (2015) bistability window
+// (1 < red_len/side < 1/sin(pi/n), see geometry.js). Angle is the only slider
+// swept — dia/n/floors/height are held fixed, since they set the side length
+// `b` that the window is defined relative to. A dense grid search (rather
+// than the closed-form inverse) keeps this robust even where the relationship
+// isn't monotonic or a real solution barely exists within the slider bounds.
+function snapToBistable() {
+  const p = getP();
+  const rEl = document.getElementById('r-angle'), nEl = document.getElementById('n-angle');
+  const angMin = parseFloat(rEl.min), angMax = parseFloat(rEl.max);
+  const STEPS = 1600;
+  let best = null, bestScore = Infinity, bestG = null;
+  for (let i = 0; i <= STEPS; i++) {
+    const angle = angMin + (angMax - angMin) * i / STEPS;
+    const g = computeGeometry({ ...p, angle });
+    if (!g.valid) continue;
+    const target = (1 + g.bistableMax) / 2;
+    const inWindow = g.bLengthRatio > 1 && g.bLengthRatio < g.bistableMax;
+    const score = inWindow
+      ? Math.abs(g.bLengthRatio - target)
+      : 1000 + Math.min(Math.abs(g.bLengthRatio - 1), Math.abs(g.bLengthRatio - g.bistableMax));
+    if (score < bestScore) { bestScore = score; best = angle; bestG = g; }
+  }
+  if (best === null) { showToast('No valid geometry found in the angle range', 2200); return; }
+  rEl.value = best.toFixed(1); nEl.value = best.toFixed(1);
+  applyAutoSeam(); draw(); drawEnergyDebounced(); drawModalDebounced(); captureState();
+  const verdict = bestG.bistable ? 'bistable' : 'closest available (still not bistable — try widening dia/n/floors)';
+  showToast(`Angle \u2192 ${best.toFixed(1)}\u00b0 \u2014 b/a=${bestG.bLengthRatio.toFixed(3)}, ${verdict}`, 3200);
+}
+
 function resetDefaults() {
   const defs = { dia:3, height:20, n:6, floors:10, angle:100, ext:2, seaml:1.4, seamr:0, extcols:1, stack:1, scale:100, compress:0, wallmm:0.8 };
   Object.entries(defs).forEach(([k, v]) => {
@@ -414,7 +444,7 @@ export function exposeGlobals() {
   Object.assign(window, {
     loadPreset, exportPreset, importPreset, handlePresetFile,
     exportSVG, exportPNGA4, exportPDF, exportDXF, exportSTL, exportMoldSTL,
-    autoFitA4, undo, redo, resetDefaults,
+    autoFitA4, undo, redo, resetDefaults, snapToBistable,
     switchCenterTab, switchMoldTab,
     toggleSubPanel, expandSubPanel, toggleAutoRotate, toggleCompressAnimate,
     toggleSourcesModal,
