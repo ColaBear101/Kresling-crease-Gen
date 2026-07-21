@@ -243,6 +243,21 @@ export function drawModal() {
 
   const p = getP(), g = computeGeometry(p);
   if (!(g.R > 0) || !(g.floor_h > 0)) return;
+
+  // The full eigenvalue sweep (~0.3-0.5s) only reruns when n or R0 actually
+  // changed (computeModalSweep memoises on that key) — but on a cache miss,
+  // painting nothing until it finishes makes the panel look frozen. Show a
+  // placeholder immediately and defer the real work to the next tick.
+  const sweepKey = `${p.n},${(g.R / g.floor_h).toFixed(6)}`;
+  if (sweepKey !== _lastKey) {
+    ctx.fillStyle = 'rgba(200,210,255,0.55)'; ctx.font = '11px "JetBrains Mono",monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Computing modal frequencies\u2026', W/2, H/2 - 6);
+    ctx.fillStyle = 'rgba(139,144,160,0.55)'; ctx.font = '9px "JetBrains Mono",monospace';
+    ctx.fillText('6-DOF eigenvalue sweep, \u2248 0.3\u20130.5s', W/2, H/2 + 10);
+    setTimeout(() => { computeModalSweep(p, g); drawModal(); }, 15);
+    return;
+  }
+
   const { results, degCur, n, R0 } = computeModalSweep(p, g);
 
   const DEG_MIN = results[0].deg, DEG_MAX = results[results.length-1].deg;
