@@ -1,6 +1,6 @@
 import { A4_W, A4_H } from './constants.js';
 import { computeGeometry, buildVerts } from './geometry.js';
-import { getP, updateStats, drawInfoBoxCanvas } from './ui.js';
+import { getP, updateStats, drawInfoBoxCanvas, creaseLengthLabels, drawCreaseLabelsCanvas } from './ui.js';
 import { flatCam } from './state.js';
 
 // ─── Private: nearest-crease hit-test ────────────────────────────────────────
@@ -186,6 +186,10 @@ export function drawFlat() {
   const [hx0,hy0]=toC(x1+seamrS+0.25,botY), [,hy1]=toC(x1+seamrS+0.25,topY);
   ctx.fillText(`H=${(bounds.h*scale).toFixed(1)}cm`, hx0+3, (hy0+hy1)/2); ctx.restore();
 
+  // Per-crease-type length annotations (one red/blue/green example) — lets
+  // someone fabricating the pattern spot-check a ruler measurement.
+  drawCreaseLabelsCanvas(ctx, toC, creaseLengthLabels(p, g, verts, olIdx));
+
   // Hover crosshair + nearest crease tooltip
   if (flatCam.hoverPx) {
     const { x: hpx, y: hpy } = flatCam.hoverPx;
@@ -301,6 +305,7 @@ export function renderPatternToCtx(ctx, p, g, W, H, sc, ox, oy, forPrint) {
     ctx.fillText(`W=${(bounds.w*scale).toFixed(1)}cm`,(lx0+rx0)/2-18,ly0-3);
     const[hx0,hy0]=toC(x1+seamrS+0.25,botY),[,hy1]=toC(x1+seamrS+0.25,topY);
     ctx.fillText(`H=${(bounds.h*scale).toFixed(1)}cm`,hx0+3,(hy0+hy1)/2);ctx.restore();
+    drawCreaseLabelsCanvas(ctx, toC, creaseLengthLabels(p, g, verts, olIdx));
   }
 }
 
