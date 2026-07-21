@@ -39,6 +39,7 @@ export const MATERIALS = {
     // depending on grade and manufacturer.
     E_GPa: 2.5,
     nu: 0.34, // representative polyimide Poisson's ratio
+    density_g_cm3: 1.42, // DuPont Kapton HN datasheet, ASTM D-1505
   },
 };
 
@@ -77,4 +78,16 @@ export function springConstants(p, g) {
     };
   }
   return { k_m: 2.0, k_v: 1.0 };
+}
+
+// Mass of the physical sheet consumed by the flat crease pattern (the actual
+// printed/cut piece — cut border + seams + end extension — since that's the
+// material a person buys and cuts, whether or not every bit of it ends up on
+// the folded tube). Returns grams, or null if material isn't polyimide (the
+// generic material has no density, so a "mass" would be meaningless).
+//   areaCm2   flat-pattern printed area in cm^2 (bounds.w*scale * bounds.h*scale)
+export function sheetMassGrams(p, areaCm2) {
+  if (p.material !== 'polyimide') return null;
+  const t_cm = (p.thicknessUm || 50) * M_PER_UM / M_PER_CM; // um -> cm
+  return MATERIALS.polyimide.density_g_cm3 * t_cm * areaCm2;
 }
