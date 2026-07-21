@@ -41,6 +41,9 @@
       <div class="ctrl"><label>Sides (n)</label><div class="ctrl-right"><input type="range" id="r-n" min="3" max="20" step="1" value="6"><input class="num-inp" id="n-n" type="number" min="3" max="20" step="1" value="6"></div></div>
       <div class="ctrl"><label>Floors</label><div class="ctrl-right"><input type="range" id="r-floors" min="2" max="20" step="1" value="10"><input class="num-inp" id="n-floors" type="number" min="2" max="20" step="1" value="10"></div></div>
       <div class="ctrl"><label>Angle BR (°)</label><div class="ctrl-right"><input type="range" id="r-angle" min="60" max="140" step="0.5" value="100"><input class="num-inp" id="n-angle" type="number" min="60" max="140" step="0.5" value="100"></div></div>
+      <div style="padding:2px 4px 6px">
+        <button onclick="snapToBistable()" title="Adjusts Angle BR to the middle of the bistable window (1 < red_len/side < 1/sin(π/n)), per Cai et al. (2015)" style="width:100%;font-size:10px;padding:4px 6px;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--accent2);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">⚡ Snap to bistable</button>
+      </div>
       <div class="ctrl"><label>Stack count</label><div class="ctrl-right"><input type="range" id="r-stack" min="1" max="4" step="1" value="1"><input class="num-inp" id="n-stack" type="number" min="1" max="4" step="1" value="1"></div></div>
       <div class="ctrl ctrl-select" style="padding:3px 4px">
         <label>Chirality</label>
@@ -120,6 +123,7 @@
           <div class="stat"><div class="stat-l">Extend L</div><div class="stat-v" id="s-extlen">—</div></div>
           <div class="stat"><div class="stat-l">Fold L</div><div class="stat-v" id="s-foldlen">—</div></div>
           <div class="stat"><div class="stat-l">Fold ⌀i</div><div class="stat-v" id="s-foldid">—</div></div>
+          <div class="stat"><div class="stat-l">Mass</div><div class="stat-v" id="s-mass">—</div></div>
         </div>
         <div class="mv-legend">
           <span><span class="mv-dot" style="background:#378ADD"></span>Blue — valley</span>
