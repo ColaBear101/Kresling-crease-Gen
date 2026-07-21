@@ -68,6 +68,14 @@ export function draw3d() {
     return [x1, y*cx - z1*sx, y*sx + z1*cx];
   }
 
+  // Fixed camera-relative "headlamp" light — stays put relative to the
+  // viewer as the model is dragged, so highlights sweep across the surface
+  // naturally instead of rotating along with it.
+  const LIGHT = normalize3([0.35, 0.55, 0.78]);
+  function normalize3(v) { const l = Math.hypot(v[0],v[1],v[2]) || 1; return [v[0]/l, v[1]/l, v[2]/l]; }
+  function sub3(a, b)   { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+  function cross3(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+
   const modelH   = totalFloors * eFH;
   const dist     = cam3d.dist || (Math.max(R * 2, modelH) * 1.8 + 2);
   const fovScale = Math.min(W, H) / (1.6 * dist);
@@ -99,7 +107,18 @@ export function draw3d() {
     const pp = s.pts.map(project);
     if (pp.some(v => !v)) return null;
     const avgZ = pp.reduce((a, p) => a + p[2], 0) / pp.length;
-    return { ...s, pp, avgZ };
+    let brightness = null;
+    if (s.type === 'face') {
+      // Panels aren't perfectly planar quads once compressed/twisted, so
+      // split into two triangles and average their normals rather than
+      // assuming all 4 points are coplanar.
+      const rv = s.pts.map(rotate); // view-space (rotated, pre-perspective)
+      const n1 = normalize3(cross3(sub3(rv[1], rv[0]), sub3(rv[2], rv[0])));
+      const n2 = normalize3(cross3(sub3(rv[2], rv[0]), sub3(rv[3], rv[0])));
+      const nrm = normalize3([n1[0]+n2[0], n1[1]+n2[1], n1[2]+n2[2]]);
+      brightness = Math.abs(nrm[0]*LIGHT[0] + nrm[1]*LIGHT[1] + nrm[2]*LIGHT[2]);
+    }
+    return { ...s, pp, avgZ, brightness };
   }).filter(Boolean).sort((a, b) => b.avgZ - a.avgZ);
 
   for (const seg of projected) {
@@ -108,7 +127,11 @@ export function draw3d() {
     if (type === 'face') {
       ctx.moveTo(pp[0][0],pp[0][1]);
       for (let i=1;i<pp.length;i++) ctx.lineTo(pp[i][0],pp[i][1]);
-      ctx.closePath(); ctx.fillStyle='rgba(40,80,180,0.10)'; ctx.fill();
+      ctx.closePath();
+      const b = 0.35 + 0.65 * seg.brightness; // ambient floor of 0.35 so no facet goes fully black
+      const rr = Math.round(50*b), gg = Math.round(95*b), bb = Math.round(195*b);
+      ctx.fillStyle = `rgba(${rr},${gg},${bb},${(0.06 + 0.16*b).toFixed(3)})`;
+      ctx.fill();
       continue;
     }
     ctx.moveTo(pp[0][0],pp[0][1]);
