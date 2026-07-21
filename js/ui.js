@@ -1,5 +1,6 @@
-import { A4_W, A4_H, SOURCES } from './constants.js';
+import { A4_W, A4_H, SOURCES, MODEL_NOTES } from './constants.js';
 import { patternBounds } from './geometry.js';
+import { sheetMassGrams } from './material.js';
 
 // ─── DOM parameter readers ────────────────────────────────────────────────────
 export function getV(id)   { return parseFloat(document.getElementById('n-' + id).value); }
@@ -74,6 +75,17 @@ export function updateStats(p, g) {
 
   document.getElementById('s-extlen').textContent  = g.extendLen.toFixed(2) + ' cm';
   document.getElementById('s-foldlen').textContent = g.foldLen.toFixed(2)   + ' cm';
+
+  const massEl = document.getElementById('s-mass');
+  if (massEl) {
+    const massG = sheetMassGrams(p, sW * sH); // printed flat-pattern area, cm^2
+    if (massG === null) {
+      massEl.textContent = '—'; massEl.title = 'Select Polyimide material for a real mass estimate';
+    } else {
+      massEl.textContent = massG.toFixed(2) + ' g';
+      massEl.title = `Density ${1.42} g/cm\u00b3 \u00d7 thickness ${p.thicknessUm}\u00b5m \u00d7 printed area ${(sW*sH).toFixed(1)}cm\u00b2 (cut border + seams, the actual sheet a person would cut)`;
+    }
+  }
   const foldIdEl = document.getElementById('s-foldid');
   if (g.foldInnerValid) {
     foldIdEl.textContent = g.foldInnerDia.toFixed(2) + ' cm';
@@ -158,6 +170,58 @@ export function escSVG(s) {
 }
 export const escHTML = escSVG; // same three entities either way
 
+// ─── Representative crease-length dimension labels ───────────────────────────
+// One example of each crease type (mountain/valley/diagonal), annotated with
+// its actual printed length, so someone fabricating the pattern can
+// spot-check a ruler measurement against the app's numbers. Coordinates are
+// in the same pattern-cm space as buildVerts()'s output; olIdx/orIdx are the
+// column indices of the outer-left/outer-right main-pattern columns (i.e.
+// `extcols` and `extcols+n`), same convention used throughout this file.
+export function creaseLengthLabels(p, g, verts, olIdx) {
+  const { scale } = p;
+  const labels = [];
+  if (verts.length > 1 && verts[0][olIdx+1] && verts[1][olIdx]) {
+    const [ax,ay] = verts[0][olIdx+1], [bx,by] = verts[1][olIdx]; // f=0 diagonal (v3->v4, see render-flat.js)
+    labels.push({ ax, ay, bx, by, text: `green=${(g.green_len*scale).toFixed(2)}cm`, color: '#3dba6e' });
+  }
+  if (verts.length > 1 && verts[0][olIdx+1] && verts[1][olIdx+1]) {
+    const [ax,ay] = verts[0][olIdx+1], [bx,by] = verts[1][olIdx+1]; // first inner mountain crease
+    labels.push({ ax, ay, bx, by, text: `red=${(g.red_len*scale).toFixed(2)}cm`, color: '#e05252' });
+  }
+  if (verts[0][olIdx] && verts[0][olIdx+1]) {
+    const [ax,ay] = verts[0][olIdx], [bx,by] = verts[0][olIdx+1]; // one polygon side
+    labels.push({ ax, ay, bx, by, text: `side=${(g.b*scale).toFixed(2)}cm`, color: '#378ADD' });
+  }
+  return labels;
+}
+
+export function drawCreaseLabelsCanvas(ctx, toC, labels) {
+  ctx.save();
+  ctx.font = '8px "JetBrains Mono",monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  labels.forEach(({ ax, ay, bx, by, text, color }) => {
+    const [cax,cay] = toC(ax,ay), [cbx,cby] = toC(bx,by);
+    const mx = (cax+cbx)/2, my = (cay+cby)/2;
+    const ddx = cbx-cax, ddy = cby-cay, len = Math.hypot(ddx,ddy) || 1;
+    const px = -ddy/len, py = ddx/len, offset = 10;
+    ctx.fillStyle = color; ctx.globalAlpha = 0.85;
+    ctx.fillText(text, mx + px*offset, my + py*offset);
+  });
+  ctx.globalAlpha = 1; ctx.restore();
+}
+
+export function creaseLabelsSVGText(toSVG, labels) {
+  let out = '';
+  labels.forEach(({ ax, ay, bx, by, text, color }) => {
+    const [sax,say] = toSVG(ax,ay), [sbx,sby] = toSVG(bx,by);
+    const mx = (sax+sbx)/2, my = (say+sby)/2;
+    const ddx = sbx-sax, ddy = sby-say, len = Math.hypot(ddx,ddy) || 1;
+    const px = -ddy/len, py = ddx/len, offset = 10;
+    out += `<text x="${(mx+px*offset).toFixed(1)}" y="${(my+py*offset).toFixed(1)}" font-family="'JetBrains Mono',monospace" font-size="8" fill="${color}" text-anchor="middle">${escSVG(text)}</text>\n`;
+  });
+  return out;
+}
+
 // ─── Sources / references modal ──────────────────────────────────────────────
 // Renders constants.js:SOURCES on first open so the list can never drift out
 // of sync with what the app actually cites. force=true/false shows/hides
@@ -168,7 +232,9 @@ export function toggleSourcesModal(force) {
   const show = force !== undefined ? force : !modal.classList.contains('show');
   if (show) {
     const body = document.getElementById('sourcesBody');
-    body.innerHTML = SOURCES.map(s => `
+    body.innerHTML = `
+      <div class="src-notes">${MODEL_NOTES.map(n => `<p>${escHTML(n)}</p>`).join('')}</div>` +
+      SOURCES.map(s => `
       <div class="src-item">
         <span class="src-cite"><a href="${s.url}" target="_blank" rel="noopener noreferrer">${escHTML(s.cite)}</a></span>
         <span class="src-use">Used for: ${escHTML(s.use)}</span>
