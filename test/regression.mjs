@@ -68,6 +68,28 @@ test('snap-to-bistable grid search lands inside the window for the default prese
   assert.ok(Math.abs(best - 72.7) < 0.5, `expected ~72.7deg, got ${best}`);
 });
 
+test('snap-to-monostable grid search lands outside the window, with a safety margin, for the default preset', () => {
+  const base = { dia: 3, height: 20, n: 6, floors: 10, stack: 1, chir: 1 };
+  const angMin = 60, angMax = 140, STEPS = 1600;
+  const candidates = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const angle = angMin + (angMax - angMin) * i / STEPS;
+    const g = computeGeometry({ ...base, angle });
+    if (!g.valid) continue;
+    const below = g.bLengthRatio <= 1, above = g.bLengthRatio >= g.bistableMax;
+    if (!below && !above) continue;
+    const margin = below ? (1 - g.bLengthRatio) : (g.bLengthRatio - g.bistableMax);
+    candidates.push({ angle, g, margin });
+  }
+  assert.ok(candidates.length > 0, 'expected at least one monostable angle in range');
+  const safe = candidates.filter(c => c.margin >= 0.05);
+  const pool = safe.length ? safe : candidates;
+  let best = pool[0];
+  for (const c of pool) if (Math.abs(c.angle - 90) < Math.abs(best.angle - 90)) best = c;
+  assert.equal(best.g.bistable, false);
+  assert.ok(Math.abs(best.angle - 122.25) < 0.5, `expected ~122.25deg, got ${best.angle}`);
+});
+
 console.log('\nmaterial.js — sheet mass');
 test('sheetMassGrams: density x thickness x area, polyimide only', () => {
   const g = sheetMassGrams({ material: 'polyimide', thicknessUm: 50 }, 500); // 500 cm^2
