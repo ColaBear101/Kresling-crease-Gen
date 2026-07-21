@@ -39,7 +39,7 @@ export const SOURCES = [
   {
     cite: 'Masana, R., & Daqaq, M. F. (2019). Equilibria and bifurcations of a foldable paper-based spring inspired by Kresling-pattern origami. Physical Review E, 100(6), 063001.',
     url:  'https://doi.org/10.1103/PhysRevE.100.063001',
-    use:  'Axial truss strain-energy model E(h, φ) behind the energy graph and bistability check',
+    use:  'Physical framing (strain energy vs. deployment height, multiple equilibria) motivating energy.js\u2019s energy-vs-height graph. Note: the implementation is a dihedral-angle bending model (rest angles from the crease pattern\u2019s exact 3D geometry, stiffness from material.js), not a reproduction of their specific axial-truss parametrization \u2014 see MODEL_NOTES.',
   },
   {
     cite: 'Schenk, M., & Guest, S. D. (2011). Origami folding: A structural engineering approach. In Origami5: Fifth International Meeting of Origami Science, Mathematics, and Education (p. 291). A K Peters.',
@@ -66,4 +66,36 @@ export const SOURCES = [
     url:  'https://doi.org/10.1103/PhysRevE.101.063003',
     use:  '6-DOF truss model, mass/stiffness matrices, and axial vs. off-axis modal-frequency analysis behind the Modal frequencies panel (js/modal.js), reproducing their Fig. 13(b)',
   },
+];
+
+// ─── Notes on how the app's independent physics models relate ──────────────
+// Shown in the Sources panel above the citation list. This app runs two
+// separate, NOT mutually calibrated energy/stiffness models — they answer
+// different questions and shouldn't be expected to agree numerically:
+//
+// energy.js / material.js (Energy graph, Crease stiffness panel):
+//   Dihedral-angle bending model. Treats each crease as a torsional hinge
+//   (Schenk & Guest 2011 / Filipov et al. 2015 convention); rest angles come
+//   from the flat crease pattern's own coordinates, which use ARC length
+//   (b = circumference/n) for the polygon side. Exact for the printed/cut
+//   flat pattern; an n->infinity-accurate approximation of the true 3D
+//   circumradius for finite n.
+//
+// modal.js (Modal frequencies panel):
+//   Kidambi & Wang (2020) 6-DOF axial-truss model. Uses the polygon's exact
+//   3D circumradius and true chord lengths between vertices (not arc
+//   length), because their truss/eigenvalue formulation needs the real
+//   embedded geometry. This is the physically exact convention, but a
+//   different one from energy.js's.
+//
+// Practically: for a fine polygon (large n) the two conventions converge and
+// results are comparable; for coarse polygons (small n, e.g. n=3-5) expect
+// the two panels' absolute numbers to diverge somewhat even for the same
+// design. Each panel is internally consistent; they're just not the same
+// model.
+export const MODEL_NOTES = [
+  'This app runs two independent, not mutually calibrated physics models \u2014 they answer different questions and aren\u2019t expected to agree numerically.',
+  '\u2022 Energy graph & Crease stiffness (energy.js/material.js): a dihedral-angle bending (torsional-hinge) model using the flat pattern\u2019s own arc-length-based side length.',
+  '\u2022 Modal frequencies (modal.js): the Kidambi & Wang (2020) 6-DOF axial-truss model, using the polygon\u2019s exact 3D chord lengths instead of arc length.',
+  'Both are internally consistent and exact for a fine (large-n) polygon; for coarse polygons (small n) expect their absolute numbers to diverge somewhat for the same design.',
 ];
