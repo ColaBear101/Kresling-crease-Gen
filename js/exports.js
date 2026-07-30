@@ -206,7 +206,13 @@ export function exportSTL() {
   const cross=([ax,ay,az],[bx,by,bz])=>[ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
   const sub  =([ax,ay,az],[bx,by,bz])=>[ax-bx,ay-by,az-bz];
   const norm = v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};
-  const tri  =(v1,v2,v3)=>{const n=norm(cross(sub(v2,v1),sub(v3,v1)));const f=x=>x.toFixed(6);return `  facet normal ${n.map(f).join(' ')}\n    outer loop\n      vertex ${v1.map(f).join(' ')}\n      vertex ${v2.map(f).join(' ')}\n      vertex ${v3.map(f).join(' ')}\n    endloop\n  endfacet\n`;};
+  // NOTE: swapping v2/v3 up front flips winding (and thus the normal) for
+  // every triangle emitted by this function uniformly. The mesh was
+  // watertight (edges paired correctly) but wound with every normal
+  // pointing inward (confirmed via signed-volume check); this corrects the
+  // global orientation while preserving the existing outer/inner relative
+  // winding logic below, which is otherwise unchanged.
+  const tri  =(v1,v2,v3)=>{[v2,v3]=[v3,v2];const n=norm(cross(sub(v2,v1),sub(v3,v1)));const f=x=>x.toFixed(6);return `  facet normal ${n.map(f).join(' ')}\n    outer loop\n      vertex ${v1.map(f).join(' ')}\n      vertex ${v2.map(f).join(' ')}\n      vertex ${v3.map(f).join(' ')}\n    endloop\n  endfacet\n`;};
   const quad =(v1,v2,v3,v4)=>tri(v1,v2,v3)+tri(v1,v3,v4);
 
   const parts = [`solid kresling_hollow_n${n}_f${floors}\n`];
@@ -252,24 +258,35 @@ export function exportMoldSTL(moldType) {
 
   const parts = [`solid kresling_${moldType}_mold_n${n}_f${floors}\n`];
 
-  // Base plate
+  // Base plate. NOTE: bottom/top vertex order below is deliberately the
+  // "opposite" of what looks natural — quad(v1,v2,v3,v4)'s normal comes from
+  // (v2-v1)×(v3-v1), so a face's winding (not just which z it's at) decides
+  // which way it points. These orderings were previously swapped (bottom
+  // pointed +Z into the plate, top pointed -Z into the plate), which is
+  // exactly backwards — the top face is what the ridges sit on, so it must
+  // point +Z (out, toward the ridges) and the bottom must point -Z (out,
+  // away from the plate).
   const zBot=-baseT,zTop=0,bx0=plateX0,bx1=plateX1,by0=plateY0,by1=plateY1;
   parts.push(
-    quad([bx0,by0,zBot],[bx1,by0,zBot],[bx1,by1,zBot],[bx0,by1,zBot]),
-    quad([bx0,by0,zTop],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by0,zTop]),
+    quad([bx0,by0,zBot],[bx0,by1,zBot],[bx1,by1,zBot],[bx1,by0,zBot]), // bottom, normal -Z
+    quad([bx0,by0,zTop],[bx1,by0,zTop],[bx1,by1,zTop],[bx0,by1,zTop]), // top,    normal +Z
     quad([bx0,by0,zBot],[bx0,by0,zTop],[bx0,by1,zTop],[bx0,by1,zBot]),
     quad([bx1,by0,zTop],[bx1,by0,zBot],[bx1,by1,zBot],[bx1,by1,zTop]),
     quad([bx0,by0,zTop],[bx0,by0,zBot],[bx1,by0,zBot],[bx1,by0,zTop]),
     quad([bx0,by1,zBot],[bx0,by1,zTop],[bx1,by1,zTop],[bx1,by1,zBot]),
   );
 
+  // Ridge prism along a 2D segment: 2 end caps + 2 slanted sides + a floor
+  // (AL-AR-BR-BL at z=0). The floor was previously omitted, which left every
+  // ridge's base perimeter as an open (non-manifold) boundary edge — the
+  // ridge would poke out of a plate its own mesh never closed.
   function addRidge(ax,ay,bx_,by_,rH,rW){
     const ddx=bx_-ax,ddy=by_-ay,len=Math.hypot(ddx,ddy);
     if(len<1e-6)return;
     const tx=ddx/len,ty=ddy/len,nx_=-ty,ny_=tx,hw=rW/2;
     const AL=[ax-hw*nx_,ay-hw*ny_,0],AR=[ax+hw*nx_,ay+hw*ny_,0],AP=[ax,ay,rH];
     const BL=[bx_-hw*nx_,by_-hw*ny_,0],BR=[bx_+hw*nx_,by_+hw*ny_,0],BP=[bx_,by_,rH];
-    parts.push(tri(AL,AP,AR),tri(BL,BR,BP),quad(AL,BL,BP,AP),quad(AR,AP,BP,BR));
+    parts.push(tri(AL,AP,AR),tri(BL,BR,BP),quad(AL,BL,BP,AP),quad(AR,AP,BP,BR),quad(AL,AR,BR,BL));
   }
 
   const mountainSegs=[];

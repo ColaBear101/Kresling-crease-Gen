@@ -10,6 +10,7 @@ import { computeGeometry } from '../js/geometry.js';
 import { sheetMassGrams } from '../js/material.js';
 import { computeModalSweep } from '../js/modal.js';
 import { PRESETS } from '../js/constants.js';
+import { exportMoldSTL, exportSTL } from '../js/exports.js';
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -116,6 +117,83 @@ test('zero-stiffness point falls near their reported 67.5deg', () => {
   for (const r of results) if (r.axialA < best.axialA) best = r;
   assert.ok(Math.abs(best.deg - 67.5) < 2.5, `zero-stiffness at deg=${best.deg}, axialA=${best.axialA}`);
   assert.ok(best.axialA < 0.02, `expected axialA near 0, got ${best.axialA}`);
+});
+
+console.log('\nexports.js — STL watertightness + orientation (mold + tube)');
+// Both bugs were "clean" numerically (no NaN, sane bbox, correct facet
+// count) but structurally broken: exportMoldSTL's ridge prisms were
+// missing their floor face (open boundary at z=0 on every ridge) and the
+// plate's top/bottom faces had swapped winding; exportSTL's tube was fully
+// watertight but wound with every normal pointing inward. Neither shows up
+// without an actual manifold check, so that's what these assert on: every
+// edge must be shared by exactly one triangle in each direction (no holes,
+// no duplicates), and the divergence-theorem signed volume must be
+// positive (mesh is consistently oriented outward, not inside-out).
+function checkSTL(stl) {
+  const blocks = stl.split('facet normal').slice(1);
+  const edges = new Map();
+  let vol = 0;
+  for (const b of blocks) {
+    const vs = [...b.matchAll(/vertex\s+(\S+)\s+(\S+)\s+(\S+)/g)].map(m => [m[1], m[2], m[3]]);
+    for (let i = 0; i < 3; i++) {
+      const k = vs[i].join(',') + '|' + vs[(i+1)%3].join(',');
+      edges.set(k, (edges.get(k)||0) + 1);
+    }
+    const [v1,v2,v3] = vs.map(p => p.map(Number));
+    const cx=v2[1]*v3[2]-v2[2]*v3[1], cy=v2[2]*v3[0]-v2[0]*v3[2], cz=v2[0]*v3[1]-v2[1]*v3[0];
+    vol += (v1[0]*cx + v1[1]*cy + v1[2]*cz) / 6;
+  }
+  let boundary = 0, dup = 0;
+  for (const [k, c] of edges) {
+    const [a, b] = k.split('|');
+    const rev = edges.get(b+'|'+a) || 0;
+    if (c > 1) dup++;
+    if (c === 1 && rev === 0) boundary++;
+  }
+  return { facets: blocks.length, boundary, dup, vol };
+}
+
+// exportMoldSTL/exportSTL pull params via ui.js's getP(), which reads
+// document.getElementById(...) — a minimal DOM shim, not real params.
+function withDomShim(overrides, fn) {
+  const P = { dia:5, height:20, n:8, floors:10, angle:100, ext:2, seaml:1.96, seamr:1.96,
+    extcols:1, stack:1, scale:100, compress:0, wallmm:0.8, moldbase:3, ridgeh:1.2, ridgew:0.6,
+    chir:1, material:'kapton', thick:25, showmv:true, showA4:true, showGrid:true,
+    showMountain:true, showValley:true, showDiagonal:true, ...overrides };
+  const fakeEl = id => {
+    const v = id.startsWith('n-') ? P[id.slice(2)] : P[id];
+    return { id, value: v!==undefined?String(v):'0', checked: !!v, style:{},
+      classList:{add(){},remove(){},toggle(){},contains(){return false;}}, addEventListener(){}, click(){},
+      getContext(){ return new Proxy({}, { get(){ return function(){ return {}; }; } }); },
+      getBoundingClientRect(){ return {width:400,height:400,left:0,top:0}; },
+      parentElement:{clientWidth:400,clientHeight:400}, offsetWidth:400, offsetHeight:400 };
+  };
+  let captured = null;
+  global.document = { getElementById: id => fakeEl(id),
+    createElement: tag => tag==='a' ? {click(){}, set href(v){}, get href(){return '';}, download:''} : fakeEl(tag),
+    addEventListener(){} };
+  global.window = global;
+  global.URL = { createObjectURL(blob){ captured = blob.parts[0]; return 'blob:fake'; } };
+  global.Blob = class { constructor(parts, opts){ this.parts = parts; this.type = opts && opts.type; } };
+  fn();
+  return captured;
+}
+
+for (const moldType of ['mountain', 'valley']) {
+  test(`exportMoldSTL('${moldType}') is watertight and consistently oriented`, () => {
+    const stl = withDomShim({}, () => exportMoldSTL(moldType));
+    const r = checkSTL(stl);
+    assert.equal(r.boundary, 0, `${r.boundary} open boundary edges (mesh has holes)`);
+    assert.equal(r.dup, 0, `${r.dup} non-manifold edges`);
+    assert.ok(r.vol > 0, `signed volume ${r.vol} should be positive (outward-oriented)`);
+  });
+}
+test('exportSTL() (hollow tube) is watertight and consistently oriented', () => {
+  const stl = withDomShim({}, () => exportSTL());
+  const r = checkSTL(stl);
+  assert.equal(r.boundary, 0, `${r.boundary} open boundary edges (mesh has holes)`);
+  assert.equal(r.dup, 0, `${r.dup} non-manifold edges`);
+  assert.ok(r.vol > 0, `signed volume ${r.vol} should be positive (outward-oriented)`);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
