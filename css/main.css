@@ -8,8 +8,8 @@
   --red:#ef4444;--green:#22c55e;--yellow:#f59e0b;--purple:#a855f7;
   --crease-blue:#378ADD;--crease-red:#e05252;--crease-green:#3dba6e;--crease-purple:#9f6fdf;
 }
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;overflow:hidden}
-.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+html,body{height:100%;width:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;overflow:hidden;overscroll-behavior:none}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
 
 /* TOOLBAR */
 .toolbar{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
@@ -17,6 +17,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
 .tab-btn{font-size:11px;font-weight:500;padding:4px 12px;border-radius:6px;border:1px solid var(--border2);background:transparent;cursor:pointer;color:var(--text2);transition:all 0.15s;font-family:'DM Sans',sans-serif}
 .tab-btn:hover{color:var(--text);border-color:var(--border2)}
 .tab-btn.active{background:var(--accent-dim);color:var(--accent2);border-color:var(--accent)}
+.shortcut-hint{white-space:nowrap}
 .badge{font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;font-family:'JetBrains Mono',monospace;letter-spacing:0.04em;margin-left:auto}
 .badge.ok{background:#0f2e1a;color:#4ade80;border:1px solid #166534}
 .badge.warn{background:#2d1f00;color:#fbbf24;border:1px solid #78350f}
@@ -130,3 +131,40 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
 .src-footer{padding:10px 0 2px;font-size:11px;color:var(--text2)}
 .src-footer a{color:var(--accent2);text-decoration:none}
 .src-footer a:hover{text-decoration:underline}
+
+/* ── MOBILE / TABLET (iPad portrait, phones) ──
+   The 3-column layout (fixed-min-width sidebar + right-panel) is wider than
+   most phone/tablet viewports, which forces the whole page to overflow
+   horizontally — pushing the bottom action bar (incl. Print) off-screen.
+   Below the breakpoint we stack the columns vertically instead. */
+@media (max-width:900px){
+  html,body{overflow-x:hidden}
+  .toolbar{flex-wrap:wrap;row-gap:6px;padding:8px 10px}
+  .shortcut-hint{display:none}
+
+  .main{flex-direction:column;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+  .sidebar{width:100%!important;min-width:0;max-width:100%;max-height:42vh;border-right:none;border-bottom:1px solid var(--border)}
+  .right-panel{width:100%!important;min-width:0;max-width:100%;border-left:none;border-top:1px solid var(--border);max-height:48vh}
+  .sidebar-resize,.right-panel-resize{display:none}
+
+  .flat-area{min-height:280px;flex:1 1 auto}
+
+  /* Action bar: keep every button reachable via horizontal swipe instead of
+     wrapping/clipping, and respect the iOS home-indicator safe area. */
+  .actions{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:thin;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  .actions button{flex:0 0 auto;padding:7px 12px;font-size:11px}
+  .sep{flex-shrink:0}
+
+  .toast{bottom:calc(60px + env(safe-area-inset-bottom))}
+}
+
+@media (max-width:480px){
+  .actions button{padding:7px 10px;font-size:10px}
+}
