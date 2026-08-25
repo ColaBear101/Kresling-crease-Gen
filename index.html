@@ -23,6 +23,7 @@
     <button class="tab-btn" onclick="exportPreset()" title="Export current settings as JSON">⬇ Export</button>
     <span class="shortcut-hint" style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:2px">S=svg P=pdf F=fit R=reset 3-9=sides Ctrl+Z=undo</span>
     <button class="tab-btn" onclick="toggleSourcesModal()" title="Academic sources & data behind the geometry, energy and material models">📖 Sources</button>
+    <button class="tab-btn" onclick="toggleExplorerModal()" title="Scan a design space against your requirements: bistable, buckling-safe, A4-fit">🧭 Design Explorer</button>
     <a class="tab-btn" href="https://github.com/ColaBear101/Kresling-crease-Gen" target="_blank" rel="noopener noreferrer" title="View source code on GitHub">
       <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.98 5.24.98 11.52c0 5.02 3.26 9.28 7.77 10.78.57.1.78-.25.78-.55 0-.27-.01-1.16-.02-2.1-3.16.69-3.83-1.34-3.83-1.34-.52-1.32-1.26-1.67-1.26-1.67-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.01 1.74 2.66 1.24 3.31.95.1-.73.4-1.24.72-1.53-2.52-.29-5.17-1.26-5.17-5.6 0-1.24.44-2.25 1.16-3.04-.12-.29-.5-1.45.11-3.02 0 0 .95-.3 3.11 1.16a10.8 10.8 0 0 1 5.66 0c2.16-1.46 3.11-1.16 3.11-1.16.61 1.57.23 2.73.11 3.02.72.79 1.16 1.8 1.16 3.04 0 4.35-2.65 5.31-5.18 5.59.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .3.2.65.78.54a11.03 11.03 0 0 0 7.75-10.77C23.02 5.24 18.27.5 12 .5Z"/></svg>
       GitHub
@@ -228,6 +229,67 @@
         <button class="modal-close" onclick="toggleSourcesModal(false)" title="Close [Esc]">✕</button>
       </div>
       <div class="modal-body" id="sourcesBody"></div>
+    </div>
+  </div>
+
+  <div id="explorerModal" class="modal-overlay" onclick="if(event.target===this)toggleExplorerModal(false)">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <span class="modal-title">🧭 Design Explorer — scan a design space against your requirements</span>
+        <button class="modal-close" onclick="toggleExplorerModal(false)" title="Close [Esc]">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="exp-primed" value="">
+        <div class="exp-layout">
+
+          <div class="exp-form">
+            <div class="sec-label">Fixed design context</div>
+            <div class="ctrl"><label>Diameter (cm)</label><div class="ctrl-right"><input class="num-inp" id="exp-dia" type="number" step="0.1" style="width:100%"></div></div>
+            <div class="ctrl"><label>Height (cm)</label><div class="ctrl-right"><input class="num-inp" id="exp-height" type="number" step="0.5" style="width:100%"></div></div>
+            <div class="ctrl"><label>Floors</label><div class="ctrl-right"><input class="num-inp" id="exp-floors" type="number" step="1" style="width:100%"></div></div>
+            <div class="ctrl"><label>Stack</label><div class="ctrl-right"><input class="num-inp" id="exp-stack" type="number" step="1" style="width:100%"></div></div>
+            <div class="ctrl"><label>Sides n</label><div class="ctrl-right"><input class="num-inp" id="exp-n" type="number" step="1" style="width:100%"></div></div>
+            <div class="ctrl"><label>Angle (\u00b0)</label><div class="ctrl-right"><input class="num-inp" id="exp-angle" type="number" step="0.5" style="width:100%"></div></div>
+            <div class="ctrl" title="Kapton-type polyimide thickness — drives crease spring stiffness AND the buckling check"><label>Thickness (\u00b5m)</label><div class="ctrl-right"><input class="num-inp" id="exp-thick" type="number" step="1" style="width:100%"></div></div>
+            <div class="ctrl ctrl-select"><label>Chirality</label><select id="exp-chir"><option value="1">Right-hand</option><option value="-1">Left-hand</option></select></div>
+            <div class="exp-hint">These are held fixed while the two scan axes below vary. (Whichever param you pick as an axis is overridden per grid point.)</div>
+
+            <div class="sec-label">Scan axes</div>
+            <div class="ctrl ctrl-select"><label>X axis</label><select id="exp-xaxis"><option value="n">Sides (n)</option><option value="angle">Angle BR</option><option value="dia">Diameter</option><option value="thick">Thickness</option></select></div>
+            <div class="exp-range-row"><input class="num-inp" id="exp-xmin" type="number" title="min"><span>\u2192</span><input class="num-inp" id="exp-xmax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-xsteps" type="number" title="steps" style="width:36px"></div>
+            <div class="ctrl ctrl-select"><label>Y axis</label><select id="exp-yaxis"><option value="n">Sides (n)</option><option value="angle" selected>Angle BR</option><option value="dia">Diameter</option><option value="thick">Thickness</option></select></div>
+            <div class="exp-range-row"><input class="num-inp" id="exp-ymin" type="number" title="min"><span>\u2192</span><input class="num-inp" id="exp-ymax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-ysteps" type="number" title="steps" style="width:36px"></div>
+
+            <div class="sec-label">Requirements</div>
+            <div class="ctrl-check"><input type="checkbox" id="exp-req-bistable" checked><label for="exp-req-bistable">Must be bistable (Cai et al. 2015)</label></div>
+            <div class="ctrl-check"><input type="checkbox" id="exp-req-buckling" checked><label for="exp-req-buckling">Must not buckle before snapping</label></div>
+            <div class="ctrl"><label>Safety factor</label><div class="ctrl-right"><input class="num-inp" id="exp-safety" type="number" step="0.1" value="1.5" style="width:100%"></div></div>
+            <div class="ctrl ctrl-select"><label>End condition</label><select id="exp-endcond"><option value="pinned">Pinned-pinned</option><option value="fixed-free">Fixed-free (cantilever)</option></select></div>
+            <div class="ctrl-check"><input type="checkbox" id="exp-req-a4" checked><label for="exp-req-a4">Must fit one A4 sheet (current scale/layout)</label></div>
+
+            <button class="tab-btn" id="exp-run" style="margin-top:10px;width:100%;background:var(--accent-dim);border-color:var(--accent);color:var(--accent2)">▶ Compute possibilities</button>
+            <div class="exp-hint" id="exp-status" style="min-height:2.4em"></div>
+          </div>
+
+          <div class="exp-results">
+            <div class="exp-canvas-wrap" id="expCanvasWrap">
+              <canvas id="canvasExplorer"></canvas>
+              <div id="exp-tooltip" class="exp-tooltip"></div>
+            </div>
+            <div class="exp-legend">
+              <span><span class="exp-sw" style="background:#22c55e"></span>meets all requirements</span>
+              <span><span class="exp-sw" style="background:#a16207"></span>meets 2/3</span>
+              <span><span class="exp-sw" style="background:#b45309"></span>meets 1/3</span>
+              <span><span class="exp-sw" style="background:#7f1d1d"></span>valid, meets none</span>
+              <span><span class="exp-sw" style="background:#2a2f3e"></span>invalid geometry</span>
+              <span><span class="exp-sw" style="background:#facc15;border-radius:50%"></span>current sidebar design</span>
+            </div>
+            <div class="sec-label">Top candidates (click to load into sidebar)</div>
+            <div class="exp-candidates" id="exp-candidates"><div class="exp-empty">Set your requirements and click Compute.</div></div>
+          </div>
+
+        </div>
+      </div>
     </div>
   </div>
 </div>
