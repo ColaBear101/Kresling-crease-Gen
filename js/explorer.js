@@ -255,8 +255,8 @@ function renderExplorerCandidates(passers, xKey, yKey) {
 }
 
 // Applies a chosen (x,y) grid point — plus the explorer's fixed params — to
-// the main sidebar, then closes the modal so the person lands straight on
-// the crease pattern for that design.
+// the main sidebar; app.js's kresling:explorer-apply listener then switches
+// back to the Crease pattern tab so the person lands on the result.
 function applyExplorerPoint(x, y) {
   if (!lastResult) return;
   const { xKey, yKey, fixed } = lastResult;
@@ -272,23 +272,20 @@ function applyExplorerPoint(x, y) {
   const matSel = document.getElementById('material'); if (matSel) matSel.value = 'polyimide';
   const chirSel = document.getElementById('chir'); if (chirSel) chirSel.value = String(applied.chir);
 
-  toggleExplorerModal(false);
   window.dispatchEvent(new Event('kresling:explorer-apply'));
   showToast('Design applied \u2192 ' + AXIS_DEFS[xKey].label + '=' + (AXIS_DEFS[xKey].integer ? Math.round(x) : x.toFixed(2))
     + ', ' + AXIS_DEFS[yKey].label + '=' + (AXIS_DEFS[yKey].integer ? Math.round(y) : y.toFixed(2)), 2800);
 }
 
-// ─── Modal open/close + form init ────────────────────────────────────────────
-export function toggleExplorerModal(force) {
-  const modal = document.getElementById('explorerModal');
-  if (!modal) return;
-  const show = force !== undefined ? force : !modal.classList.contains('show');
-  if (show) primeExplorerForm();
-  modal.classList.toggle('show', show);
-}
-
-function primeExplorerForm() {
-  if (document.getElementById('exp-primed')) return; // only seed defaults once per page load
+// ─── Form init / sync ─────────────────────────────────────────────────────────
+// Populates the "fixed design context" + default axis ranges from whatever
+// is currently in the main sidebar. Called once at startup (so the fields
+// are never blank/NaN — a real bug in an earlier version of this file, where
+// the "only seed once" guard checked whether the hidden marker *element*
+// existed rather than a flag on it, which is always true, so priming never
+// actually ran) and again on demand via the "Sync from sidebar" button,
+// since this panel is now always mounted rather than re-opened each time.
+function seedDefaults() {
   const cur = getP();
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
   set('exp-dia', cur.dia); set('exp-height', cur.height); set('exp-floors', cur.floors);
@@ -296,11 +293,16 @@ function primeExplorerForm() {
   set('exp-thick', cur.thicknessUm || 50); set('exp-chir', cur.chir);
   set('exp-xmin', AXIS_DEFS.n.defMin); set('exp-xmax', AXIS_DEFS.n.defMax); set('exp-xsteps', AXIS_DEFS.n.defSteps);
   set('exp-ymin', AXIS_DEFS.angle.defMin); set('exp-ymax', AXIS_DEFS.angle.defMax); set('exp-ysteps', AXIS_DEFS.angle.defSteps);
-  document.getElementById('exp-primed').value = '1';
+}
+
+export function primeExplorerForm() {
+  seedDefaults();
+  showToast('Synced from sidebar', 1200);
 }
 
 export function initExplorerEvents() {
   document.getElementById('exp-run').addEventListener('click', runExplorer);
+  document.getElementById('exp-sync').addEventListener('click', primeExplorerForm);
   ['exp-xaxis', 'exp-yaxis'].forEach(id => {
     document.getElementById(id).addEventListener('change', e => {
       const key = e.target.value, def = AXIS_DEFS[key];
@@ -311,5 +313,8 @@ export function initExplorerEvents() {
       document.getElementById(prefix + 'steps').disabled = def.integer;
     });
   });
-  window.addEventListener('resize', () => { if (lastResult) drawExplorerHeatmap(); });
+  // Seed real (non-blank) default values immediately — fixes the priming
+  // bug above rather than waiting for a "first open" that no longer exists
+  // now that this is a plain tab instead of a modal.
+  seedDefaults();
 }
