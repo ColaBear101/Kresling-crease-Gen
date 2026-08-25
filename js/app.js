@@ -15,7 +15,7 @@ import {
 } from './presets.js';
 import { exportSVG, exportPNGA4, exportPDF, exportDXF, exportSTL, exportMoldSTL } from './exports.js';
 import { ui, anim, compressAnim, cam3d, moldCam, flatCam } from './state.js';
-import { initExplorerEvents, toggleExplorerModal } from './explorer.js';
+import { initExplorerEvents, drawExplorerHeatmap } from './explorer.js';
 
 // ─── Top-level draw orchestration ────────────────────────────────────────────
 export function drawPanel() { draw3d(); drawEnergy(); drawStiffness(); }
@@ -23,8 +23,10 @@ export function drawPanel() { draw3d(); drawEnergy(); drawStiffness(); }
 export function draw() {
   if (ui.currentCenterTab === 'crease') {
     drawFlat();
-  } else if (document.getElementById('center-pane-mold').offsetParent !== null) {
-    drawMold3d();
+  } else if (ui.currentCenterTab === 'mold') {
+    if (document.getElementById('center-pane-mold').offsetParent !== null) drawMold3d();
+  } else if (ui.currentCenterTab === 'explorer') {
+    drawExplorerHeatmap();
   }
   drawPanel();
 }
@@ -139,11 +141,14 @@ function switchCenterTab(tab) {
   ui.currentCenterTab = tab;
   document.getElementById('ctab-crease').classList.toggle('active', tab === 'crease');
   document.getElementById('ctab-mold').classList.toggle('active', tab === 'mold');
-  document.getElementById('center-pane-crease').style.display = tab === 'crease' ? 'flex' : 'none';
-  document.getElementById('center-pane-mold').style.display   = tab === 'mold'   ? 'flex' : 'none';
-  document.getElementById('mold-sub-tabs').style.display       = tab === 'mold'   ? 'flex' : 'none';
+  document.getElementById('ctab-explorer').classList.toggle('active', tab === 'explorer');
+  document.getElementById('center-pane-crease').style.display   = tab === 'crease'   ? 'flex' : 'none';
+  document.getElementById('center-pane-mold').style.display     = tab === 'mold'     ? 'flex' : 'none';
+  document.getElementById('center-pane-explorer').style.display = tab === 'explorer' ? 'flex' : 'none';
+  document.getElementById('mold-sub-tabs').style.display = tab === 'mold' ? 'flex' : 'none';
   if (tab === 'crease') drawFlat();
-  else { initMold3d(); drawMold3d(); }
+  else if (tab === 'mold') { initMold3d(); drawMold3d(); }
+  else if (tab === 'explorer') drawExplorerHeatmap();
 }
 
 function switchMoldTab(tab) {
@@ -408,7 +413,7 @@ function initKeyboardShortcuts() {
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
-    if (e.key === 'Escape') { toggleSourcesModal(false); toggleExplorerModal(false); return; }
+    if (e.key === 'Escape') { toggleSourcesModal(false); return; }
 
     const tag = document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
@@ -468,6 +473,7 @@ export function initApp() {
   // it's applying several params atomically) and then fires this event so
   // the rest of the app picks the new state up in one place.
   window.addEventListener('kresling:explorer-apply', () => {
+    switchCenterTab('crease');
     applyAutoSeam(); draw(); drawEnergyDebounced(); drawModalDebounced(); captureState();
   });
 
@@ -476,7 +482,8 @@ export function initApp() {
 
   window.addEventListener('resize', () => {
     if (ui.currentCenterTab === 'crease') drawFlat();
-    else { initMold3d(); drawMold3d(); }
+    else if (ui.currentCenterTab === 'mold') { initMold3d(); drawMold3d(); }
+    else if (ui.currentCenterTab === 'explorer') drawExplorerHeatmap();
     init3d(); draw3d(); drawEnergy(); drawStiffness(); drawModalIfVisible();
   });
 
@@ -492,6 +499,6 @@ export function exposeGlobals() {
     autoFitA4, undo, redo, resetDefaults, snapToBistable, snapToMonostable,
     switchCenterTab, switchMoldTab,
     toggleSubPanel, expandSubPanel, toggleAutoRotate, toggleCompressAnimate,
-    toggleSourcesModal, toggleExplorerModal,
+    toggleSourcesModal,
   });
 }
