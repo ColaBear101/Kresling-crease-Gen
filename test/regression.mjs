@@ -196,5 +196,57 @@ test('exportSTL() (hollow tube) is watertight and consistently oriented', () => 
   assert.ok(r.vol > 0, `signed volume ${r.vol} should be positive (outward-oriented)`);
 });
 
+console.log('\nbuckling.js — snap-through vs. Euler/shell buckling');
+{
+  const { bucklingCheck, snapThroughForce, eulerColumnBuckling, shellLocalBuckling } = await import('../js/buckling.js');
+
+  test('buckling check unavailable for generic (non-polyimide) material', () => {
+    const p = { ...PRESETS.bistable6, chir: 1, material: 'generic' };
+    const g = computeGeometry(p);
+    const bc = bucklingCheck(p, g);
+    assert.equal(bc.available, false);
+  });
+
+  test('buckling check available and positive for polyimide, physically-sane preset', () => {
+    const p = { ...PRESETS.bistable6, chir: 1, material: 'polyimide', thicknessUm: 50 };
+    const g = computeGeometry(p);
+    const bc = bucklingCheck(p, g, 1.5, 'pinned');
+    assert.equal(bc.available, true);
+    assert.ok(bc.Fsnap > 0, 'snap-through force should be positive for a bistable design');
+    assert.ok(bc.Pglobal > 0 && bc.Plocal > 0);
+    assert.ok(Number.isFinite(bc.margin) && bc.margin > 0);
+    assert.equal(bc.Pcr, Math.min(bc.Pglobal, bc.Plocal));
+    assert.equal(bc.safe, bc.margin >= 1.5);
+  });
+
+  test('fixed-free end condition gives a lower (or equal) Euler load than pinned-pinned', () => {
+    const p = { ...PRESETS.tower, chir: 1, material: 'polyimide', thicknessUm: 50 };
+    const g = computeGeometry(p);
+    const pinned = eulerColumnBuckling(p, g, 'pinned');
+    const cantilever = eulerColumnBuckling(p, g, 'fixed-free');
+    assert.ok(cantilever < pinned, 'cantilever (Le=2L) should buckle at a lower load than pinned-pinned (Le=L)');
+  });
+
+  test('buckling margin decreases as sheet thickness increases (crease stiffness grows faster than shell strength)', () => {
+    const base = { ...PRESETS.bistable6, chir: 1, material: 'polyimide' };
+    const margins = [15, 50, 110].map(t => {
+      const p = { ...base, thicknessUm: t };
+      const g = computeGeometry(p);
+      return bucklingCheck(p, g, 1.5).margin;
+    });
+    assert.ok(margins[0] > margins[1] && margins[1] > margins[2],
+      `expected strictly decreasing margins with thickness, got ${margins}`);
+  });
+
+  test('shellLocalBuckling and eulerColumnBuckling scale with radius/height as expected', () => {
+    const p = { ...PRESETS.bistable6, chir: 1, material: 'polyimide', thicknessUm: 50 };
+    const gSmall = computeGeometry(p);
+    const gBig = computeGeometry({ ...p, dia: p.dia * 2 }); // bigger R, same n -> bigger b too, but R doubles
+    // Local shell buckling load scales ~ R * t (sigma_cr ~ t/R, Pcr = sigma_cr*2*pi*R*t = 2*pi*E*t^2/sqrt(3(1-nu^2)), independent of R)
+    const local1 = shellLocalBuckling(p, gSmall), local2 = shellLocalBuckling(p, gBig);
+    assert.ok(Math.abs(local1 - local2) / local1 < 1e-9, 'local shell buckling load should be independent of radius at fixed thickness');
+  });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
