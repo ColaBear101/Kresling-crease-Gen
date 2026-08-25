@@ -15,6 +15,7 @@ import {
 } from './presets.js';
 import { exportSVG, exportPNGA4, exportPDF, exportDXF, exportSTL, exportMoldSTL } from './exports.js';
 import { ui, anim, compressAnim, cam3d, moldCam, flatCam } from './state.js';
+import { initExplorerEvents, toggleExplorerModal } from './explorer.js';
 
 // ─── Top-level draw orchestration ────────────────────────────────────────────
 export function drawPanel() { draw3d(); drawEnergy(); drawStiffness(); }
@@ -407,7 +408,7 @@ function initKeyboardShortcuts() {
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
-    if (e.key === 'Escape') { toggleSourcesModal(false); return; }
+    if (e.key === 'Escape') { toggleSourcesModal(false); toggleExplorerModal(false); return; }
 
     const tag = document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
@@ -460,6 +461,15 @@ export function initApp() {
   initKeyboardShortcuts();
   init3d();
   initSubPanelResizeObservers();
+  initExplorerEvents();
+
+  // Design Explorer writes chosen values straight into the sidebar's DOM
+  // inputs (bypassing the normal input/change listeners in bindPairs, since
+  // it's applying several params atomically) and then fires this event so
+  // the rest of the app picks the new state up in one place.
+  window.addEventListener('kresling:explorer-apply', () => {
+    applyAutoSeam(); draw(); drawEnergyDebounced(); drawModalDebounced(); captureState();
+  });
 
   document.addEventListener('fullscreenchange', _fsChange);
   document.addEventListener('webkitfullscreenchange', _fsChange);
@@ -482,6 +492,6 @@ export function exposeGlobals() {
     autoFitA4, undo, redo, resetDefaults, snapToBistable, snapToMonostable,
     switchCenterTab, switchMoldTab,
     toggleSubPanel, expandSubPanel, toggleAutoRotate, toggleCompressAnimate,
-    toggleSourcesModal,
+    toggleSourcesModal, toggleExplorerModal,
   });
 }
