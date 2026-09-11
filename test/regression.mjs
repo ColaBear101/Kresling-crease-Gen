@@ -213,6 +213,24 @@ test('exportSTL() (hollow tube) is watertight and consistently oriented', () => 
   assert.ok(r.vol > 0, `signed volume ${r.vol} should be positive (outward-oriented)`);
 });
 
+// Ridge centerlines sit on a grid spaced by the scaled floor height (rows)
+// and polygon side length (columns). At small enough pattern scale combined
+// with many floors/sides, that spacing shrinks below the requested ridge
+// width, so neighboring ridge prisms pack into each other and leave
+// exactly-coincident (non-manifold) faces where they touch — found via this
+// exact combination (dia=1, height=2, n=20, floors=20, scale=10%, all within
+// their sliders' ranges): row spacing collapses to 0.01cm while even the
+// minimum ridgew (0.3mm = 0.03cm) is already 3x wider than that.
+test("exportMoldSTL('valley') stays manifold when ridges are packed tighter than ridgew (small scale, many floors/sides)", () => {
+  const o = { dia:1, height:2, n:20, floors:20, angle:140, extcols:4, scale:10,
+    seaml:6, seamr:6, ext:0, moldbase:1, ridgeh:5, ridgew:0.3, chir:1 };
+  const stl = withDomShim(o, () => exportMoldSTL('valley'));
+  const r = checkSTL(stl);
+  assert.equal(r.boundary, 0, `${r.boundary} open boundary edges (mesh has holes)`);
+  assert.equal(r.dup, 0, `${r.dup} non-manifold edges`);
+  assert.ok(r.vol > 0, `signed volume ${r.vol} should be positive (outward-oriented)`);
+});
+
 console.log('\nbuckling.js — snap-through vs. Euler/shell buckling');
 {
   const { bucklingCheck, snapThroughForce, eulerColumnBuckling, shellLocalBuckling } = await import('../js/buckling.js');

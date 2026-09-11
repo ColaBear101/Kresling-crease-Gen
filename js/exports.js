@@ -239,8 +239,23 @@ export function exportMoldSTL(moldType) {
   const col_min = -extcols, col_max = n + extcols, total_cols = col_max - col_min + 1;
   const baseT  = (p.moldbase || 3)   / 10;
   const ridgeH = (p.ridgeh   || 1.2) / 10;
-  const ridgeW = (p.ridgew   || 0.6) / 10;
+  const ridgeWReq = (p.ridgew || 0.6) / 10;
   const margin = 0.2;
+
+  // Ridge centerlines sit on a grid spaced by the scaled floor height (rows)
+  // and polygon side length (columns). At small pattern scale combined with
+  // many floors/sides, that spacing can shrink below the requested ridge
+  // width, so neighboring ridge prisms pack into each other and leave
+  // exactly-coincident (non-manifold) faces where they touch — confirmed via
+  // the same edge-manifold check test/regression.mjs uses, e.g. dia=1,
+  // height=2, n=20, floors=20, scale=10%: row spacing collapses to 0.01cm
+  // while the minimum ridgew (0.3mm=0.03cm) is already 3x wider than that.
+  // Clamp the width actually used so adjacent ridges never overlap.
+  const minRidgeSpacing = Math.min(g.floor_h, g.b) * (p.scale || 1);
+  const ridgeW = Math.min(ridgeWReq, Math.max(0.001, minRidgeSpacing * 0.9));
+  if (ridgeW < ridgeWReq - 1e-9) {
+    showToast(`Ridge width reduced to fit — creases are packed closer together than ${p.ridgew}mm at this scale`);
+  }
 
   const { verts, bounds, extS, seamlS, seamrS } = buildVerts(p, g);
   const olIdx=extcols,orIdx=extcols+n;
