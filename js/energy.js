@@ -3,6 +3,45 @@ import { computeGeometry } from './geometry.js';
 import { ui } from './state.js';
 import { springConstants } from './material.js';
 
+// Dihedral (fold) angles at the mountain crease AC (psi_m) and valley crease
+// BC (psi_v) of one Kresling unit cell, at floor height h. A, B are two
+// adjacent bottom-polygon vertices (z=0); C, D are the corresponding
+// top-polygon vertices (z=h), twisted by phi = dxH/R (arc-length small-angle
+// approximation, not modal.js's exact chord angle — see MODEL_NOTES).
+// Exported (pure function of h, L_r0, R, n) so it can be verified directly
+// against an independent dihedral-angle formula in test/regression.mjs,
+// rather than only indirectly through the canvas draw.
+export function getDihedral(h, L_r0, R, n) {
+  if (h <= 0 || h >= L_r0) return null;
+  const dxH   = Math.sqrt(Math.max(0, L_r0*L_r0 - h*h));
+  const phi   = dxH / R;
+  const alpha = Math.PI / n;
+  const vsub  = ([ax,ay,az],[bx,by,bz]) => [ax-bx,ay-by,az-bz];
+  const vcross= ([ax,ay,az],[bx,by,bz]) => [ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
+  const vdot  = ([ax,ay,az],[bx,by,bz]) => ax*bx+ay*by+az*bz;
+  const vnorm = v => { const l=Math.hypot(...v)||1; return v.map(x=>x/l); };
+  const A=[R,0,0];
+  const B=[R*Math.cos(2*alpha), R*Math.sin(2*alpha), 0];
+  const C=[R*Math.cos(phi)*Math.cos(alpha)-R*Math.sin(phi)*Math.sin(alpha),
+           R*Math.cos(phi)*Math.sin(alpha)+R*Math.sin(phi)*Math.cos(alpha), h];
+  const D=[R*Math.cos(phi+2*alpha), R*Math.sin(phi+2*alpha), h];
+  const n1=vnorm(vcross(vsub(B,A),vsub(C,A)));
+  const n2=vnorm(vcross(vsub(C,A),vsub(D,A)));
+  // Valley crease BC is shared by faces ABC and BCD (mirrors how n1/n2
+  // share mountain crease AC between faces ABC and ACD, pivoting on the
+  // other shared-edge endpoint B instead of A). The previous n3 only ever
+  // referenced A, B, C — never D — so it was just ±n1 (the same face
+  // renormalized), making psi_v a constant pi regardless of h. Verified
+  // against an independent torsion-angle formula on the 4-point chain.
+  const n3=vnorm(vcross(vsub(A,B),vsub(C,B)));
+  const n4=vnorm(vcross(vsub(C,B),vsub(D,B)));
+  return {
+    psi_m: Math.acos(Math.max(-1,Math.min(1,vdot(n1,n2)))),
+    psi_v: Math.acos(Math.max(-1,Math.min(1,vdot(n3,n4)))),
+    dxH,
+  };
+}
+
 export function drawEnergy() {
   const canvas = document.getElementById('canvasEnergy');
   const wrap   = canvas.parentElement;
@@ -23,31 +62,7 @@ export function drawEnergy() {
   const h_min = L_r0 * 0.02;
   const STEPS = 400;
 
-  function getDihedral(h) {
-    if (h <= 0 || h >= L_r0) return null;
-    const dxH   = Math.sqrt(Math.max(0, L_r0*L_r0 - h*h));
-    const phi   = dxH / R;
-    const alpha = Math.PI / n;
-    const vsub  = ([ax,ay,az],[bx,by,bz]) => [ax-bx,ay-by,az-bz];
-    const vcross= ([ax,ay,az],[bx,by,bz]) => [ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
-    const vdot  = ([ax,ay,az],[bx,by,bz]) => ax*bx+ay*by+az*bz;
-    const vnorm = v => { const l=Math.hypot(...v)||1; return v.map(x=>x/l); };
-    const A=[R,0,0];
-    const B=[R*Math.cos(2*alpha), R*Math.sin(2*alpha), 0];
-    const C=[R*Math.cos(phi)*Math.cos(alpha)-R*Math.sin(phi)*Math.sin(alpha),
-             R*Math.cos(phi)*Math.sin(alpha)+R*Math.sin(phi)*Math.cos(alpha), h];
-    const D=[R*Math.cos(phi+2*alpha), R*Math.sin(phi+2*alpha), h];
-    const n1=vnorm(vcross(vsub(B,A),vsub(C,A)));
-    const n2=vnorm(vcross(vsub(C,A),vsub(D,A)));
-    const n3=vnorm(vcross(vsub(C,B),vsub(A,B)));
-    return {
-      psi_m: Math.acos(Math.max(-1,Math.min(1,vdot(n1,n2)))),
-      psi_v: Math.acos(Math.max(-1,Math.min(1,-vdot(n1,n3)))),
-      dxH,
-    };
-  }
-
-  const rest = getDihedral(floor_h);
+  const rest = getDihedral(floor_h, L_r0, R, n);
   if (!rest) {
     ctx.fillStyle='#f87171'; ctx.font='12px monospace';
     ctx.fillText('Cannot compute energy: invalid geometry', 20, H/2); return;
@@ -60,7 +75,7 @@ export function drawEnergy() {
 
   for (let i = 0; i <= STEPS; i++) {
     const h      = h_min + (i/STEPS) * (h_max - h_min);
-    const angles = getDihedral(h);
+    const angles = getDihedral(h, L_r0, R, n);
     if (!angles) { energyPoints.push(0); heightPoints.push(h * totalFloors); continue; }
     const { psi_m, psi_v } = angles;
     const E = (k_m*(psi_m-psi_m0)**2 + k_v*(psi_v-psi_v0)**2) * n * totalFloors;
@@ -99,12 +114,20 @@ export function drawEnergy() {
     minF = -robustSpan * 1.15; maxF = robustSpan * 1.15;
   }
 
-  // Find local minima
+  // Find local minima. The window shrinks near the sweep edges (rather than
+  // excluding those indices outright) so the one minimum that's always
+  // present at the designed rest height isn't missed just because that
+  // height happens to sit close to h_min/h_max (e.g. any near-90 deg preset,
+  // or "tower": floor_h lands within WINDOW samples of h_max with a fixed
+  // 8-sample margin, so it was silently dropped and the graph showed zero
+  // equilibria). The two absolute endpoints are excluded here since they're
+  // handled separately by endpointMinima below.
   const WINDOW = 8;
   const localMinima = [];
-  for (let i = WINDOW; i < energyPoints.length - WINDOW; i++) {
+  for (let i = 1; i < energyPoints.length - 1; i++) {
+    const w = Math.min(WINDOW, i, energyPoints.length - 1 - i);
     let isMin = true;
-    for (let j = i-WINDOW; j <= i+WINDOW; j++) { if (j!==i && energyPoints[j]<=energyPoints[i]){isMin=false;break;} }
+    for (let j = i-w; j <= i+w; j++) { if (j!==i && energyPoints[j]<=energyPoints[i]){isMin=false;break;} }
     if (isMin) localMinima.push({ idx:i, h:heightPoints[i], E:energyPoints[i] });
   }
   const mergedMinima = [];

@@ -11,6 +11,8 @@ import { sheetMassGrams } from '../js/material.js';
 import { computeModalSweep } from '../js/modal.js';
 import { PRESETS } from '../js/constants.js';
 import { exportMoldSTL, exportSTL } from '../js/exports.js';
+import { getDihedral } from '../js/energy.js';
+import { springConstants } from '../js/material.js';
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -113,6 +115,115 @@ test('sheetMassGrams: density x thickness x area, polyimide only', () => {
   const g = sheetMassGrams({ material: 'polyimide', thicknessUm: 50 }, 500); // 500 cm^2
   assert.ok(Math.abs(g - 3.55) < 1e-6, `expected 3.55g, got ${g}`);
   assert.equal(sheetMassGrams({ material: 'generic' }, 500), null);
+});
+
+console.log('\nenergy.js — dihedral-angle bending energy (arc-length model)');
+// Independent cross-check of getDihedral()'s two dihedral angles against a
+// standard 4-point torsion-angle formula (as used in molecular geometry),
+// applied to the same A,B,C,D crease-pattern points. This is the "measure
+// against the real code with an independently-derived formula" check the
+// project asks for, rather than trusting a hand re-derivation.
+function torsionAngle(p0, p1, p2, p3) {
+  const sub   = ([ax,ay,az],[bx,by,bz]) => [ax-bx,ay-by,az-bz];
+  const cross = ([ax,ay,az],[bx,by,bz]) => [ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
+  const dot   = ([ax,ay,az],[bx,by,bz]) => ax*bx+ay*by+az*bz;
+  const norm  = v => { const l = Math.hypot(...v) || 1; return v.map(x => x/l); };
+  const b1 = sub(p1,p0), b2 = sub(p2,p1), b3 = sub(p3,p2);
+  const m1 = norm(cross(b1,b2)), m2 = norm(cross(b2,b3));
+  return Math.acos(Math.max(-1, Math.min(1, dot(m1,m2))));
+}
+function creasePoints(h, L_r0, R, n) {
+  const dxH = Math.sqrt(Math.max(0, L_r0*L_r0 - h*h));
+  const phi = dxH / R, alpha = Math.PI / n;
+  const A = [R,0,0];
+  const B = [R*Math.cos(2*alpha), R*Math.sin(2*alpha), 0];
+  const C = [R*Math.cos(phi)*Math.cos(alpha)-R*Math.sin(phi)*Math.sin(alpha),
+             R*Math.cos(phi)*Math.sin(alpha)+R*Math.sin(phi)*Math.cos(alpha), h];
+  const D = [R*Math.cos(phi+2*alpha), R*Math.sin(phi+2*alpha), h];
+  return { A, B, C, D };
+}
+test('getDihedral matches an independent torsion-angle formula (psi_m and psi_v)', () => {
+  for (const name of ['bistable6', 'bistable8', 'tower', 'monostable', 'compact']) {
+    const p = { ...PRESETS[name], chir: 1 };
+    const g = computeGeometry(p);
+    const L_r0 = g.red_len;
+    for (const frac of [0.1, 0.4, 0.7, 0.95]) {
+      const h = L_r0*0.02 + frac*(L_r0*0.999 - L_r0*0.02);
+      const { A, B, C, D } = creasePoints(h, L_r0, g.R, p.n);
+      const d = getDihedral(h, L_r0, g.R, p.n);
+      // fold-angle convention used throughout energy.js is pi - torsion angle
+      const psi_m_expected = Math.PI - torsionAngle(B, A, C, D);
+      const psi_v_expected = Math.PI - torsionAngle(A, B, C, D);
+      assert.ok(Math.abs(d.psi_m - psi_m_expected) < 1e-9, `${name}@${frac}: psi_m ${d.psi_m} vs ${psi_m_expected}`);
+      assert.ok(Math.abs(d.psi_v - psi_v_expected) < 1e-9, `${name}@${frac}: psi_v ${d.psi_v} vs ${psi_v_expected}`);
+    }
+  }
+});
+test('psi_v actually varies with h instead of being pinned at a constant (regression for the n3/n4 valley-face bug)', () => {
+  // n3 used to be built from only A, B, C (the same face as n1, never
+  // touching D), so dot(n1,n3) was identically 1 and psi_v = acos(-1) = pi
+  // for every h. A real valley dihedral must vary continuously across the
+  // sweep, the same way psi_m already did.
+  const p = { ...PRESETS.bistable6, chir: 1 };
+  const g = computeGeometry(p);
+  const L_r0 = g.red_len;
+  const lo = getDihedral(L_r0*0.05, L_r0, g.R, p.n);
+  const hi = getDihedral(L_r0*0.95, L_r0, g.R, p.n);
+  assert.ok(Math.abs(lo.psi_v - hi.psi_v) > 0.5, `psi_v barely changed: ${lo.psi_v} -> ${hi.psi_v}`);
+  assert.ok(Math.abs(lo.psi_v - Math.PI) > 1e-6 || Math.abs(hi.psi_v - Math.PI) > 1e-6,
+    'psi_v should not be pinned at pi across the sweep');
+});
+
+// Minimal re-implementation of drawEnergy()'s minima-finding loop (that
+// logic lives inside the canvas-drawing function, not exported), to check
+// it against known-bistable/monostable presets the way geometry.js's own
+// tests check g.bistable above.
+function findEnergyMinima(p) {
+  const g = computeGeometry(p);
+  const totalFloors = p.floors * p.stack;
+  const L_r0 = g.red_len, h_max = L_r0*0.999, h_min = L_r0*0.02, STEPS = 400;
+  const rest = getDihedral(g.floor_h, L_r0, g.R, p.n);
+  const { k_m, k_v } = springConstants(p, g);
+  const energyPoints = [], heightPoints = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const h = h_min + (i/STEPS) * (h_max - h_min);
+    const a = getDihedral(h, L_r0, g.R, p.n);
+    const E = a ? (k_m*(a.psi_m-rest.psi_m)**2 + k_v*(a.psi_v-rest.psi_v)**2) * p.n * totalFloors : 0;
+    energyPoints.push(E); heightPoints.push(h * totalFloors);
+  }
+  const WINDOW = 8;
+  const localMinima = [];
+  for (let i = 1; i < energyPoints.length - 1; i++) {
+    const w = Math.min(WINDOW, i, energyPoints.length - 1 - i);
+    let isMin = true;
+    for (let j = i-w; j <= i+w; j++) { if (j!==i && energyPoints[j]<=energyPoints[i]) { isMin = false; break; } }
+    if (isMin) localMinima.push({ h: heightPoints[i], E: energyPoints[i] });
+  }
+  const mergedMinima = [];
+  let lastH = -Infinity;
+  for (const m of localMinima) {
+    if (m.h - lastH > (h_max-h_min)*totalFloors*0.05) { mergedMinima.push(m); lastH = m.h; }
+  }
+  return mergedMinima;
+}
+test('local-minima detection finds the designed-height minimum for every stock preset, including ones where it sits near the sweep edge', () => {
+  // "tower" and the n=20 case both have floor_h within 8 samples of h_max
+  // (out of 400) — the un-clamped fixed-width WINDOW used to exclude that
+  // whole band from consideration, so the always-present minimum at the
+  // designed height was silently dropped (mergedMinima.length === 0) even
+  // though the geometry is perfectly valid.
+  for (const name of ['bistable6', 'bistable8', 'tower', 'monostable', 'compact']) {
+    const p = { ...PRESETS[name], chir: 1 };
+    const minima = findEnergyMinima(p);
+    assert.equal(minima.length, 1, `${name}: expected exactly 1 minimum, got ${minima.length}`);
+  }
+});
+test('local-minima detection is not fooled by an off-by-window edge case (tower-like near-h_max design point)', () => {
+  const p = { dia: 3, height: 8, n: 20, floors: 8, angle: 95, stack: 1, chir: 1 };
+  const g = computeGeometry(p);
+  assert.ok(g.valid, 'geometry should be valid');
+  const minima = findEnergyMinima(p);
+  assert.equal(minima.length, 1, `expected exactly 1 minimum, got ${minima.length}`);
 });
 
 console.log('\nmodal.js — Kidambi & Wang (2020) 6-DOF sweep, checked against their Fig. 7/13 examples (n=8, R0=0.917)');
