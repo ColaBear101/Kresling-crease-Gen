@@ -60,7 +60,10 @@ export function handlePresetFile(input, { draw, applyAutoSeam }) {
         seamAutoMode = !!data.seamAuto;
         document.getElementById('seam-auto-cb').checked = seamAutoMode;
       }
-      if (!seamAutoMode) applyAutoSeam();
+      // applyAutoSeam() itself is a no-op unless seamAutoMode is true, so this
+      // must recompute (not skip) precisely when auto mode is on — otherwise
+      // an imported file whose seaml/seamr are stale or absent never gets fixed up.
+      if (seamAutoMode) applyAutoSeam();
       draw();
       showToast(`Preset loaded: n=${data.n || '?'} floors=${data.floors || '?'} ✓`);
     } catch (err) {

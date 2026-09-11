@@ -559,6 +559,56 @@ console.log('\nexplorer.js — Design Explorer grid search (axis generation + re
   });
 }
 
+console.log('\npresets.js — preset import seam-auto wiring');
+// handlePresetFile() defers to an injected applyAutoSeam(), which is itself a
+// no-op unless seamAutoMode is true — so the call site must invoke it exactly
+// when seamAutoMode ends up true after import, or an auto-seam preset's
+// seaml/seamr never get recomputed for the newly-loaded geometry.
+{
+  const { PRESET_KEYS } = await import('../js/constants.js');
+
+  function presetDom() {
+    const store = new Map();
+    function el(id) {
+      if (!store.has(id)) {
+        store.set(id, { id, value: '0', checked: false, textContent: '',
+          classList: { add(){}, remove(){}, contains(){ return false; } } });
+      }
+      return store.get(id);
+    }
+    PRESET_KEYS.forEach(k => { el('r-' + k); el('n-' + k); });
+    el('chir'); el('material'); el('seam-auto-cb'); el('toast');
+    global.document = { getElementById: el };
+    global.window = global;
+    global.FileReader = class {
+      readAsText(file) { this.onload({ target: { result: file.__content } }); }
+    };
+    return el;
+  }
+
+  function fakeInput(data) { return { files: [{ __content: JSON.stringify(data) }], value: 'x' }; }
+
+  {
+    const { handlePresetFile } = await import(`../js/presets.js?t=${Math.random()}`);
+    presetDom();
+    let calls = 0;
+    test('seamAuto:true in the imported file triggers an applyAutoSeam recompute', () => {
+      handlePresetFile(fakeInput({ n: 6, floors: 8, seamAuto: true }), { draw: () => {}, applyAutoSeam: () => calls++ });
+      assert.equal(calls, 1);
+    });
+  }
+
+  {
+    const { handlePresetFile } = await import(`../js/presets.js?t=${Math.random()}`);
+    presetDom();
+    let calls = 0;
+    test('seamAuto:false in the imported file leaves applyAutoSeam uncalled (manual seam values from the file stand)', () => {
+      handlePresetFile(fakeInput({ n: 6, floors: 8, seamAuto: false, seaml: 1.23, seamr: 1.23 }), { draw: () => {}, applyAutoSeam: () => calls++ });
+      assert.equal(calls, 0);
+    });
+  }
+}
+
 console.log('\nhistory.js — undo/redo state stack');
 // history.js's captureState/undo/redo keep module-level history[]/historyIdx
 // singletons, so each scenario below imports a fresh copy (via a unique
