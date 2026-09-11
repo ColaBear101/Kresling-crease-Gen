@@ -38,14 +38,21 @@ export function init3d() {
     cam3d.lastMouse = { x: e.clientX, y: e.clientY };
     draw3d();
   };
-  canvas.addEventListener('wheel', e => {
+  // init3d() re-runs on every panel resize/fullscreen toggle (it has to, to
+  // re-measure the canvas), so these are assigned like the pointer handlers
+  // above rather than addEventListener-ed — an addEventListener call here
+  // would stack a new listener on top of every prior one still attached,
+  // making one scroll tick or dblclick fire progressively more times the
+  // longer a session runs (confirmed via CDP: 5 'wheel' listeners after just
+  // 3 extra init3d() calls, each compounding cam3d.dist's zoom multiplier).
+  canvas.onwheel = e => {
     e.preventDefault();
     const { scaleRef, autoDist } = fitDist3d(getP(), computeGeometry(getP()));
     const cur = cam3d.dist || autoDist;
     cam3d.dist = e.deltaY > 0 ? Math.min(cur * 1.15, autoDist * 4) : Math.max(cur * 0.87, scaleRef * 0.08);
     draw3d();
-  }, { passive: false });
-  canvas.addEventListener('dblclick', () => { cam3d.dist = null; draw3d(); });
+  };
+  canvas.ondblclick = () => { cam3d.dist = null; draw3d(); };
 }
 
 export function draw3d() {

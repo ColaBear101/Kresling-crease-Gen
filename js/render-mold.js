@@ -46,7 +46,13 @@ export function initMold3d() {
     moldCam.lastMouse = { x: e.clientX, y: e.clientY };
     drawMold3d();
   };
-  canvas.addEventListener('wheel', e => {
+  // initMold3d() re-runs on every tab switch/window resize (it has to, to
+  // re-measure the canvas), so these are assigned like the pointer handlers
+  // above rather than addEventListener-ed — addEventListener here would stack
+  // a new listener on top of every prior one still attached, making one
+  // scroll tick or dblclick fire progressively more times the longer a
+  // session runs.
+  canvas.onwheel = e => {
     e.preventDefault();
     const p = getP(), g = computeGeometry(p);
     const modelDiag = moldScaleRef(p, g);
@@ -54,8 +60,8 @@ export function initMold3d() {
     const cur = moldCam.dist || autoDist;
     moldCam.dist = e.deltaY > 0 ? Math.min(cur * 1.15, autoDist * 4) : Math.max(cur * 0.87, modelDiag * 0.15);
     drawMold3d();
-  }, { passive: false });
-  canvas.addEventListener('dblclick', () => { moldCam.dist = null; drawMold3d(); });
+  };
+  canvas.ondblclick = () => { moldCam.dist = null; drawMold3d(); };
 
   // The sidebar/right-panel drag handles reflow this pane's width without
   // calling drawMold3d() themselves (they only redraw the flat/3D-tube
