@@ -149,10 +149,14 @@ export function drawEnergy() {
   function toY(E) { return PAD.t + gH - (E-minE)/(maxE-minE+1e-9)*gH; }
   function toY2(F) { return PAD.t + gH - (F-minF)/(maxF-minF+1e-9)*gH; }
 
-  // Grid
+  // Grid (tick counts shrink on narrow/short panels so labels never crowd
+  // into each other \u2014 at the default size these evaluate to 5 and 4, i.e.
+  // unchanged from before)
+  const xDivs = Math.max(2, Math.min(5, Math.floor(gW / 45)));
+  const yDivs = Math.max(2, Math.min(4, Math.floor(gH / 40)));
   ctx.strokeStyle='rgba(59,130,246,0.1)'; ctx.lineWidth=0.5;
-  for(let i=0;i<=4;i++){const y=PAD.t+i*(gH/4);ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+gW,y);ctx.stroke();}
-  for(let i=0;i<=5;i++){const x=PAD.l+i*(gW/5);ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+gH);ctx.stroke();}
+  for(let i=0;i<=yDivs;i++){const y=PAD.t+i*(gH/yDivs);ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+gW,y);ctx.stroke();}
+  for(let i=0;i<=xDivs;i++){const x=PAD.l+i*(gW/xDivs);ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+gH);ctx.stroke();}
 
   ctx.strokeStyle='rgba(180,200,255,0.45)'; ctx.lineWidth=1.2;
   ctx.beginPath();ctx.moveTo(PAD.l,PAD.t);ctx.lineTo(PAD.l,PAD.t+gH);ctx.lineTo(PAD.l+gW,PAD.t+gH);ctx.stroke();
@@ -163,15 +167,15 @@ export function drawEnergy() {
   const energyUnitLabel = p.material === 'polyimide' ? 'Energy (N\u00b7cm)' : 'Energy (a.u.)';
   ctx.save();ctx.translate(11,PAD.t+gH/2);ctx.rotate(-Math.PI/2);ctx.fillText(energyUnitLabel,0,0);ctx.restore();
   ctx.font='9px "JetBrains Mono",monospace';
-  for(let i=0;i<=5;i++){const h=totalH_min+(i/5)*(totalH_max-totalH_min);ctx.fillStyle='rgba(139,144,160,0.7)';ctx.fillText(h.toFixed(1),toX(h),PAD.t+gH+13);}
+  for(let i=0;i<=xDivs;i++){const h=totalH_min+(i/xDivs)*(totalH_max-totalH_min);ctx.fillStyle='rgba(139,144,160,0.7)';ctx.fillText(h.toFixed(1),toX(h),PAD.t+gH+13);}
   ctx.textAlign='right';
-  for(let i=0;i<=4;i++){const E=minE+(1-i/4)*(maxE-minE);const y=PAD.t+(i/4)*gH;ctx.fillStyle='rgba(139,144,160,0.6)';ctx.fillText(E.toFixed(3),PAD.l-4,y+3);}
+  for(let i=0;i<=yDivs;i++){const E=minE+(1-i/yDivs)*(maxE-minE);const y=PAD.t+(i/yDivs)*gH;ctx.fillStyle='rgba(139,144,160,0.6)';ctx.fillText(E.toFixed(3),PAD.l-4,y+3);}
 
   if (showForce) {
     ctx.strokeStyle='rgba(180,200,255,0.45)'; ctx.lineWidth=1.2;
     ctx.beginPath();ctx.moveTo(PAD.l+gW,PAD.t);ctx.lineTo(PAD.l+gW,PAD.t+gH);ctx.stroke();
     ctx.textAlign='left'; ctx.font='9px "JetBrains Mono",monospace';
-    for(let i=0;i<=4;i++){const F=minF+(1-i/4)*(maxF-minF);const y=PAD.t+(i/4)*gH;ctx.fillStyle='rgba(245,158,11,0.75)';ctx.fillText(F.toFixed(2),PAD.l+gW+4,y+3);}
+    for(let i=0;i<=yDivs;i++){const F=minF+(1-i/yDivs)*(maxF-minF);const y=PAD.t+(i/yDivs)*gH;ctx.fillStyle='rgba(245,158,11,0.75)';ctx.fillText(F.toFixed(2),PAD.l+gW+4,y+3);}
     ctx.save();ctx.translate(W-8,PAD.t+gH/2);ctx.rotate(Math.PI/2);ctx.textAlign='center';ctx.font='10px "JetBrains Mono",monospace';ctx.fillStyle='rgba(245,158,11,0.85)';ctx.fillText('Force (N)',0,0);ctx.restore();
     // Zero-force reference line
     const y0 = toY2(0);
@@ -202,47 +206,125 @@ export function drawEnergy() {
   ctx.beginPath();ctx.moveTo(toX(designedH),PAD.t);ctx.lineTo(toX(designedH),PAD.t+gH);
   ctx.strokeStyle='rgba(160,160,200,0.3)';ctx.lineWidth=1;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
 
-  // Minima
-  const eqColors=['#4ade80','#fbbf24','#a78bfa','#f87171'];
-  allMinima.forEach((eq,idx)=>{
-    const x=toX(eq.h),y=toY(eq.E);
-    ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle=eqColors[idx%eqColors.length];ctx.fill();
-    ctx.strokeStyle='#1a1d28';ctx.lineWidth=1.5;ctx.stroke();
-    ctx.beginPath();ctx.moveTo(x,y+5);ctx.lineTo(x,PAD.t+gH);ctx.strokeStyle=eqColors[idx%eqColors.length];ctx.lineWidth=0.7;ctx.setLineDash([2,3]);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle=eqColors[idx%eqColors.length];ctx.font='9px "JetBrains Mono",monospace';ctx.textAlign='center';
-    ctx.fillText(eq.label||(idx===0?'Eq.A':'Eq.B'),x,y-8);ctx.fillText(eq.h.toFixed(1)+'cm',x,y-18);
-  });
-
-  // Current-state dot (compress slider)
+  // Current-state (compress slider) position, computed up front because the
+  // minima-label loop below needs it: the as-designed height very often *is*
+  // an energy minimum, so the current-state dot frequently lands right on
+  // top of an equilibrium marker — their labels must not both claim the
+  // normal "float near the dot" position or they render as illegible mush.
   const curH    = (1-p.compress)*(designedH - h_min*totalFloors) + h_min*totalFloors;
   const curIdx  = Math.max(0,Math.min(STEPS,Math.round((curH-totalH_min)/(totalH_max-totalH_min)*STEPS)));
   const curE    = energyPoints[curIdx];
   const curF    = showForce ? forcePoints[curIdx] : null;
   const cx2=toX(curH), cy2=toY(curE);
+  const COINCIDE_PX = 8;
+
+  // Minima
+  const eqColors=['#4ade80','#fbbf24','#a78bfa','#f87171'];
+  let coincidentIdx = -1;
+  allMinima.forEach((eq,idx)=>{
+    const x=toX(eq.h),y=toY(eq.E);
+    ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle=eqColors[idx%eqColors.length];ctx.fill();
+    ctx.strokeStyle='#1a1d28';ctx.lineWidth=1.5;ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x,y+5);ctx.lineTo(x,PAD.t+gH);ctx.strokeStyle=eqColors[idx%eqColors.length];ctx.lineWidth=0.7;ctx.setLineDash([2,3]);ctx.stroke();ctx.setLineDash([]);
+    if (Math.hypot(x-cx2,y-cy2) < COINCIDE_PX) coincidentIdx = idx;
+    ctx.fillStyle=eqColors[idx%eqColors.length];ctx.font='9px "JetBrains Mono",monospace';ctx.textAlign='center';
+    ctx.fillText(eq.label||(idx===0?'Eq.A':'Eq.B'),x,y-8);ctx.fillText(eq.h.toFixed(1)+'cm',x,y-18);
+  });
+
+  // Current-state dot (compress slider)
   ctx.beginPath();ctx.arc(cx2,cy2,6,0,Math.PI*2);ctx.fillStyle='#ef4444';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
   ctx.fillStyle='#f87171';ctx.font='9px "JetBrains Mono",monospace';
-  ctx.textAlign = cx2+80 > W-PAD.r ? 'right' : 'left';
-  const tOff = cx2+80 > W-PAD.r ? -8 : 8;
-  const curLines = [`h=${curH.toFixed(2)}`, `E=${curE.toFixed(4)}`];
-  if (showForce) curLines.push(`F=${curF.toFixed(3)}N`);
-  const nearBottom = cy2 > PAD.t+gH-24;
-  const nearTop    = cy2 < PAD.t+20;
-  const lineH = 12;
-  const yStart = nearBottom ? cy2 - 8 - (curLines.length-1)*lineH : nearTop ? cy2 + 14 : cy2 - 3 - ((curLines.length-2)*lineH)/2;
-  curLines.forEach((l,i) => ctx.fillText(l, cx2+tOff, yStart + i*lineH));
-
-  // Title
-  ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
-  const matTag = p.material === 'polyimide' ? `  \u00b7 polyimide ${p.thicknessUm}\u00b5m` : '';
-  ctx.fillText(`n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm${matTag}`, PAD.l, PAD.t-18);
-  ctx.font='9px "JetBrains Mono",monospace'; ctx.textAlign='right';
-  if (isBistable) { ctx.fillStyle='#4ade80'; ctx.fillText('BISTABLE — two energy wells', PAD.l+gW, PAD.t-18); }
-  else            { ctx.fillStyle='rgba(139,144,160,0.7)'; ctx.fillText('monostable', PAD.l+gW, PAD.t-18); }
-  if (showForce) {
-    ctx.fillStyle='#f59e0b'; ctx.fillText('- - - Force (N, right axis, clipped near limits)', PAD.l+gW, PAD.t-6);
+  if (coincidentIdx >= 0) {
+    // Sitting on an equilibrium: stack just the non-redundant readout (the
+    // eq marker already labels h) above its label instead of beside the dot.
+    const extra = [`E=${curE.toFixed(4)}`];
+    if (showForce) extra.push(`F=${curF.toFixed(3)}N`);
+    ctx.textAlign = 'center';
+    const lineH = 12;
+    extra.forEach((l,i) => ctx.fillText(l, cx2, cy2 - 30 - i*lineH));
   } else {
-    ctx.fillStyle='rgba(245,158,11,0.55)'; ctx.fillText('Set material=Polyimide for Force (N)', PAD.l+gW, PAD.t-6);
+    ctx.textAlign = cx2+80 > W-PAD.r ? 'right' : 'left';
+    const tOff = cx2+80 > W-PAD.r ? -8 : 8;
+    const curLines = [`h=${curH.toFixed(2)}`, `E=${curE.toFixed(4)}`];
+    if (showForce) curLines.push(`F=${curF.toFixed(3)}N`);
+    const nearBottom = cy2 > PAD.t+gH-24;
+    const nearTop    = cy2 < PAD.t+20;
+    const lineH = 12;
+    const yStart = nearBottom ? cy2 - 8 - (curLines.length-1)*lineH : nearTop ? cy2 + 14 : cy2 - 3 - ((curLines.length-2)*lineH)/2;
+    curLines.forEach((l,i) => ctx.fillText(l, cx2+tOff, yStart + i*lineH));
   }
+
+  // Title / legend rows (adaptive: the left-aligned title and right-aligned
+  // tags share a baseline, so at typical panel widths a long material tag or
+  // the full "BISTABLE — two energy wells" wording can run straight into
+  // the right-aligned text. Shorten or relocate pieces, cheapest first,
+  // until what's left actually fits gW — otherwise they silently overlap.)
+  function fitText(font, candidates, avail) {
+    ctx.font = font;
+    for (const c of candidates) if (ctx.measureText(c).width <= avail) return c;
+    return candidates[candidates.length - 1];
+  }
+  const TITLE_GAP = 10;
+  // Terser fallbacks for extremely narrow panels, where even the bare title
+  // (with no material tag) would otherwise run into the stability tag.
+  const titleCandidates = [
+    `n=${n}  floors=${floors}×${stack}  dia=${p.dia}cm`,
+    `n=${n} floors=${floors}×${stack} dia=${p.dia}cm`,
+    `n=${n} f=${floors}×${stack}`,
+    `n=${n}`,
+  ];
+  const matTag = p.material === 'polyimide' ? `· polyimide ${p.thicknessUm}µm` : '';
+  const stabilityCandidates = isBistable
+    ? ['BISTABLE — two energy wells', 'BISTABLE']
+    : ['monostable'];
+  const row2RightCandidates = showForce
+    ? ['- - - Force (N, right axis, clipped near limits)', '- - - Force (N, right axis)', '- - - Force (N)']
+    : ['Set material=Polyimide for Force (N)', 'Set material=Polyimide'];
+
+  ctx.font = '9px "JetBrains Mono",monospace';
+  const shortestTagW = ctx.measureText(stabilityCandidates[stabilityCandidates.length - 1]).width;
+
+  ctx.font = '10px "JetBrains Mono",monospace';
+  let matTagOnRow2 = false;
+  let row1Title = null;
+  if (matTag) {
+    const withTag = `${titleCandidates[0]}  ${matTag}`;
+    if (ctx.measureText(withTag).width + TITLE_GAP + shortestTagW <= gW) row1Title = withTag;
+    else matTagOnRow2 = true;
+  }
+  if (row1Title === null) {
+    // No material tag to place inline, or it didn't fit — fit the plain
+    // title on its own, shrinking through terser candidates if necessary.
+    row1Title = fitText('10px "JetBrains Mono",monospace', titleCandidates, gW - TITLE_GAP - shortestTagW);
+  }
+  ctx.font = '10px "JetBrains Mono",monospace';
+  const row1TitleW = ctx.measureText(row1Title).width;
+  const row1Tag = fitText('9px "JetBrains Mono",monospace', stabilityCandidates, gW - row1TitleW - TITLE_GAP);
+
+  ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
+  ctx.fillText(row1Title, PAD.l, PAD.t-18);
+  ctx.font='9px "JetBrains Mono",monospace'; ctx.textAlign='right';
+  ctx.fillStyle = isBistable ? '#4ade80' : 'rgba(139,144,160,0.7)';
+  ctx.fillText(row1Tag, PAD.l+gW, PAD.t-18);
+
+  ctx.font='9px "JetBrains Mono",monospace';
+  let row2LeftW = 0, drawMatTagRow2 = false;
+  if (matTagOnRow2) {
+    const matTagW = ctx.measureText(matTag).width;
+    const shortestRow2RightW = ctx.measureText(row2RightCandidates[row2RightCandidates.length - 1]).width;
+    // Only place it if there's room even alongside the shortest right-hand
+    // text — otherwise drop it rather than overlap (the material is still
+    // visible in the sidebar controls).
+    if (matTagW + TITLE_GAP + shortestRow2RightW <= gW) { drawMatTagRow2 = true; row2LeftW = matTagW; }
+  }
+  if (drawMatTagRow2) {
+    ctx.textAlign='left'; ctx.fillStyle='rgba(224,234,240,0.6)';
+    ctx.fillText(matTag, PAD.l, PAD.t-6);
+  }
+  const row2Text = fitText('9px "JetBrains Mono",monospace', row2RightCandidates, gW - row2LeftW - (drawMatTagRow2 ? TITLE_GAP : 0));
+  ctx.textAlign='right';
+  ctx.fillStyle = showForce ? '#f59e0b' : 'rgba(245,158,11,0.55)';
+  ctx.fillText(row2Text, PAD.l+gW, PAD.t-6);
 
   // Hover crosshair
   if (ui.energyHoverX !== null) {
