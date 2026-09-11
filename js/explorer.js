@@ -115,6 +115,7 @@ export function runExplorer() {
   }
 
   lastResult = { xs, ys, xKey, yKey, grid, fixed, req };
+  document.getElementById('exp-canvas-empty').classList.add('hidden');
   drawExplorerHeatmap();
   renderExplorerCandidates(passers, xKey, yKey);
   document.getElementById('exp-status').textContent =

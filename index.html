@@ -11,7 +11,7 @@
   <div class="toolbar">
     <span class="toolbar-title">KRESLING</span>
     <select id="preset-select" onchange="loadPreset(this.value)" title="Load a preset configuration" style="font-size:11px;padding:3px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;outline:none">
-      <option value="">Presets…</option>
+      <option value="">Presets ▾</option>
       <option value="bistable6">Bistable n=6</option>
       <option value="bistable8">Bistable n=8</option>
       <option value="monostable">Monostable</option>
@@ -183,6 +183,10 @@
               <div class="exp-canvas-wrap" id="expCanvasWrap">
                 <canvas id="canvasExplorer"></canvas>
                 <div id="exp-tooltip" class="exp-tooltip"></div>
+                <div class="exp-canvas-empty" id="exp-canvas-empty">
+                  <span class="exp-canvas-empty-icon">🧭</span>
+                  Set your fixed design context and scan axes on the left,<br>then click <b>Compute possibilities</b> to see the results here.
+                </div>
               </div>
               <div class="exp-legend">
                 <span><span class="exp-sw" style="background:#22c55e"></span>meets all requirements</span>
