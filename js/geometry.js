@@ -21,7 +21,13 @@ export function computeGeometry(p) {
   // check is about magnitude vs. the side length, so use |dx| — a signed
   // `dx > 0`/`dx < b` guard was silently failing for every obtuse angle
   // (theta > 90°, e.g. the 100°-120° defaults used by every stock preset).
-  const valid    = Math.abs(dx) < b && floor_h > 0 && b > 0;
+  // n < 3 isn't a polygon at all (b = dia*PI/n blows up to Infinity at n=0,
+  // and `Infinity > anything` makes the |dx| < b check pass vacuously —
+  // buildVerts then silently emits NaN vertices instead of being flagged
+  // invalid), so require n >= 3 and finite b/floor_h explicitly.
+  const nOk      = n >= 3;
+  const valid    = nOk && Number.isFinite(b) && Number.isFinite(floor_h) &&
+                   Math.abs(dx) < b && floor_h > 0 && b > 0;
 
   // ─── Bistability (Cai, Deng, Zhou, Feng & Tu, J. Mech. Des. 137, 061406 (2015)) ──
   // The paper models each Kresling element as a truss: the polygon side "a"
@@ -37,7 +43,7 @@ export function computeGeometry(p) {
   // below which the two energy wells merge into one (monostable, flat).
   const bLengthRatio = red_len / b;
   const bistableMax  = 1 / Math.sin(Math.PI / n);
-  const bistable = bLengthRatio > 1 && bLengthRatio < bistableMax && Math.abs(dx) > 0 && Math.abs(dx) < b;
+  const bistable = nOk && bLengthRatio > 1 && bLengthRatio < bistableMax && Math.abs(dx) > 0 && Math.abs(dx) < b;
 
   // ─── Theoretical extend / fold limits ──────────────────────────────────────
   // Model: the mountain (red) crease is the inextensible constraint that ties

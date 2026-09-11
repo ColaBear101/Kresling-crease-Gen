@@ -51,6 +51,23 @@ test('dx sign fix: obtuse-angle default preset is geometrically valid', () => {
   assert.equal(g.valid, true);
 });
 
+test('n < 3 is flagged invalid instead of silently producing NaN/Infinity geometry', () => {
+  // b = dia*PI/n -> Infinity at n=0, and `Infinity > anything` makes the old
+  // `|dx| < b` validity check pass vacuously, so buildVerts went on to emit
+  // NaN vertex coordinates under a "valid: true" geometry. n=1/2 aren't
+  // polygons either (and would let a "1-gon"/"2-gon" get flagged bistable
+  // via the closed-form ratio, since bistableMax=1/sin(pi/n) doesn't itself
+  // reject small n). Require n >= 3 explicitly.
+  const base = { dia: 3, height: 20, floors: 10, angle: 100, stack: 1, chir: 1 };
+  for (const n of [0, 1, 2]) {
+    const g = computeGeometry({ ...base, n });
+    assert.equal(g.valid, false, `n=${n} should be invalid`);
+    assert.equal(g.bistable, false, `n=${n} should not be reported bistable`);
+  }
+  const g3 = computeGeometry({ ...base, n: 3 });
+  assert.equal(g3.valid, true, 'n=3 is a legitimate polygon and should remain valid');
+});
+
 test('snap-to-bistable grid search lands inside the window for the default preset', () => {
   const base = { dia: 3, height: 20, n: 6, floors: 10, stack: 1, chir: 1 };
   const angMin = 60, angMax = 140, STEPS = 1600;
