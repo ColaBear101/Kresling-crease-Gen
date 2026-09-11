@@ -432,16 +432,20 @@ function initKeyboardShortcuts() {
         drawFlat();
         break;
       case 'arrowleft': {
+        stopCompressAnimate(); // otherwise the running animation overwrites this on its next frame
         const el = document.getElementById('r-compress');
         el.value = Math.max(0, parseFloat(el.value) - 5);
         document.getElementById('n-compress').value = el.value;
-        draw3d(); break;
+        draw3d(); drawEnergyDebounced(); drawModalDebounced(); captureState();
+        break;
       }
       case 'arrowright': {
+        stopCompressAnimate();
         const el = document.getElementById('r-compress');
         el.value = Math.min(95, parseFloat(el.value) + 5);
         document.getElementById('n-compress').value = el.value;
-        draw3d(); break;
+        draw3d(); drawEnergyDebounced(); drawModalDebounced(); captureState();
+        break;
       }
     }
 
