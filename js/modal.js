@@ -265,7 +265,7 @@ export function drawModal() {
   results.forEach(r => { [r.axialA,r.offA,r.axialB,r.offB].forEach(v => { if (Number.isFinite(v) && v>maxF) maxF=v; }); });
   maxF *= 1.12;
 
-  const PAD = { l:44, r:14, t:34, b:36 };
+  const PAD = { l:44, r:14, t:44, b:36 };
   const gW = W-PAD.l-PAD.r, gH = H-PAD.t-PAD.b;
   const toX = deg => PAD.l + (deg-DEG_MIN)/(DEG_MAX-DEG_MIN)*gW;
   const toY = f   => PAD.t + gH - Math.min(f,maxF)/maxF*gH;
@@ -298,16 +298,21 @@ export function drawModal() {
   drawCurve('axialB', '#e05252', true);
   drawCurve('offB',   '#378ADD', true);
 
-  // Current-design marker
+  // Current-design marker. The label gets its own row above the 2-row
+  // legend (rather than sharing the legend's row like the dashed line's x
+  // position would suggest) since delta0 is usually small/mid-range for
+  // realistic default parameters, which puts a same-row label right on top
+  // of the legend text.
+  ctx.font='8px "JetBrains Mono",monospace'; ctx.textAlign='right';
   if (degCur >= DEG_MIN && degCur <= DEG_MAX) {
     const x = toX(degCur);
     ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+gH);
     ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='rgba(255,255,255,0.6)';ctx.font='8px "JetBrains Mono",monospace';ctx.textAlign='center';
-    ctx.fillText('current \u03b4\u2080='+degCur.toFixed(1)+'\u00b0', x, PAD.t-4);
+    ctx.fillStyle='rgba(255,255,255,0.6)';
+    ctx.fillText('current \u03b4\u2080='+degCur.toFixed(1)+'\u00b0', PAD.l+gW, PAD.t-31);
   } else {
-    ctx.fillStyle='rgba(250,204,21,0.65)';ctx.font='8px "JetBrains Mono",monospace';ctx.textAlign='left';
-    ctx.fillText(`current \u03b4\u2080=${degCur.toFixed(1)}\u00b0 (outside ${DEG_MIN}-${DEG_MAX}\u00b0 sweep)`, PAD.l, PAD.t-4);
+    ctx.fillStyle='rgba(250,204,21,0.65)';
+    ctx.fillText(`current \u03b4\u2080=${degCur.toFixed(1)}\u00b0 (outside ${DEG_MIN}-${DEG_MAX}\u00b0 sweep)`, PAD.l+gW, PAD.t-31);
   }
 
   // Zero-stiffness annotation (global min of branch-A axial mode, if it dips low)
