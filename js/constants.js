@@ -1,3 +1,9 @@
+// Bump on every shipped round of changes. Drives the <title> (set from here
+// in app.js:initApp so it can't drift out of sync with a hand-edited
+// index.html) and the printed pattern info box, so an exported/printed sheet
+// is traceable back to the app version that generated it.
+export const APP_VERSION = 'v24';
+
 export const A4_W = 21.0;
 export const A4_H = 29.7;
 

@@ -1,4 +1,4 @@
-import { paramPairs } from './constants.js';
+import { paramPairs, APP_VERSION } from './constants.js';
 import { getP, showToast, debounce, toggleSourcesModal } from './ui.js';
 import { computeGeometry, patternBounds } from './geometry.js';
 import { drawFlat, initFlatCanvasEvents } from './render-flat.js';
@@ -457,6 +457,7 @@ function initKeyboardShortcuts() {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 export function initApp() {
+  document.title = `Kresling Crease Generator ${APP_VERSION}`;
   bindPairs();
   initSidebarResize();
   initRightPanelResize();
