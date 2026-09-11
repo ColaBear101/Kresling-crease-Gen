@@ -156,17 +156,17 @@
               <div class="ctrl"><label>Floors</label><div class="ctrl-right"><input class="num-inp" id="exp-floors" type="number" step="1" style="width:100%"></div></div>
               <div class="ctrl"><label>Stack</label><div class="ctrl-right"><input class="num-inp" id="exp-stack" type="number" step="1" style="width:100%"></div></div>
               <div class="ctrl"><label>Sides n</label><div class="ctrl-right"><input class="num-inp" id="exp-n" type="number" step="1" style="width:100%"></div></div>
-              <div class="ctrl"><label>Angle (\u00b0)</label><div class="ctrl-right"><input class="num-inp" id="exp-angle" type="number" step="0.5" style="width:100%"></div></div>
-              <div class="ctrl" title="Kapton-type polyimide thickness — drives crease spring stiffness AND the buckling check"><label>Thickness (\u00b5m)</label><div class="ctrl-right"><input class="num-inp" id="exp-thick" type="number" step="1" style="width:100%"></div></div>
+              <div class="ctrl"><label>Angle (°)</label><div class="ctrl-right"><input class="num-inp" id="exp-angle" type="number" step="0.5" style="width:100%"></div></div>
+              <div class="ctrl" title="Kapton-type polyimide thickness — drives crease spring stiffness AND the buckling check"><label>Thickness (µm)</label><div class="ctrl-right"><input class="num-inp" id="exp-thick" type="number" step="1" style="width:100%"></div></div>
               <div class="ctrl ctrl-select"><label>Chirality</label><select id="exp-chir"><option value="1">Right-hand</option><option value="-1">Left-hand</option></select></div>
-              <button class="tab-btn" id="exp-sync" style="width:100%;margin:6px 0 4px">\u21ba Sync from sidebar</button>
+              <button class="tab-btn" id="exp-sync" style="width:100%;margin:6px 0 4px">↺ Sync from sidebar</button>
               <div class="exp-hint">These stay fixed while the two scan axes below vary — whichever param you pick as an axis is overridden per grid point.</div>
 
               <div class="sec-label">Scan axes</div>
               <div class="ctrl ctrl-select"><label>X axis</label><select id="exp-xaxis"><option value="n">Sides (n)</option><option value="angle">Angle BR</option><option value="dia">Diameter</option><option value="thick">Thickness</option></select></div>
-              <div class="exp-range-row"><input class="num-inp" id="exp-xmin" type="number" title="min"><span>\u2192</span><input class="num-inp" id="exp-xmax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-xsteps" type="number" title="steps" style="width:40px"></div>
+              <div class="exp-range-row"><input class="num-inp" id="exp-xmin" type="number" title="min"><span>→</span><input class="num-inp" id="exp-xmax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-xsteps" type="number" title="steps" style="width:40px"></div>
               <div class="ctrl ctrl-select"><label>Y axis</label><select id="exp-yaxis"><option value="n">Sides (n)</option><option value="angle" selected>Angle BR</option><option value="dia">Diameter</option><option value="thick">Thickness</option></select></div>
-              <div class="exp-range-row"><input class="num-inp" id="exp-ymin" type="number" title="min"><span>\u2192</span><input class="num-inp" id="exp-ymax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-ysteps" type="number" title="steps" style="width:40px"></div>
+              <div class="exp-range-row"><input class="num-inp" id="exp-ymin" type="number" title="min"><span>→</span><input class="num-inp" id="exp-ymax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-ysteps" type="number" title="steps" style="width:40px"></div>
 
               <div class="sec-label">Requirements</div>
               <div class="ctrl-check"><input type="checkbox" id="exp-req-bistable" checked><label for="exp-req-bistable">Must be bistable (Cai et al. 2015)</label></div>
@@ -175,7 +175,7 @@
               <div class="ctrl ctrl-select"><label>End condition</label><select id="exp-endcond"><option value="pinned">Pinned-pinned</option><option value="fixed-free">Fixed-free (cantilever)</option></select></div>
               <div class="ctrl-check"><input type="checkbox" id="exp-req-a4" checked><label for="exp-req-a4">Must fit one A4 sheet (current scale/layout)</label></div>
 
-              <button class="tab-btn" id="exp-run" style="margin-top:10px;width:100%;background:var(--accent-dim);border-color:var(--accent);color:var(--accent2)">\u25b6 Compute possibilities</button>
+              <button class="tab-btn" id="exp-run" style="margin-top:10px;width:100%;background:var(--accent-dim);border-color:var(--accent);color:var(--accent2)">▶ Compute possibilities</button>
               <div class="exp-hint" id="exp-status" style="min-height:2.4em"></div>
             </div>
 
