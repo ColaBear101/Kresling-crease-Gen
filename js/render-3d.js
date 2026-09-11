@@ -2,6 +2,20 @@ import { getP } from './ui.js';
 import { computeGeometry } from './geometry.js';
 import { cam3d } from './state.js';
 
+// Shared by the wheel handler and draw3d() so the zoom range always tracks
+// the model's actual physical size (cm) instead of a fixed absolute distance
+// — the model can span anywhere from a couple cm to well over a meter across
+// the parameter range, so a fixed min/max dist either can't zoom out far
+// enough to frame a huge model or lets the camera zoom past a tiny one and
+// end up inside the mesh (near-plane clipping turns the view into a broken
+// fan of lines rather than a close-up).
+function fitDist3d(p, g) {
+  const totalFloors = p.floors * p.stack;
+  const eFH = g.floor_h * (1 - p.compress * 0.98);
+  const scaleRef = Math.max(g.R * 2, totalFloors * eFH);
+  return { scaleRef, autoDist: scaleRef * 1.8 + 2 };
+}
+
 export function init3d() {
   const canvas = document.getElementById('canvas3d');
   if (!canvas) return;
@@ -26,8 +40,9 @@ export function init3d() {
   };
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    const cur = cam3d.dist || 8;
-    cam3d.dist = e.deltaY > 0 ? Math.min(cur * 1.15, 60) : Math.max(cur * 0.87, 0.5);
+    const { scaleRef, autoDist } = fitDist3d(getP(), computeGeometry(getP()));
+    const cur = cam3d.dist || autoDist;
+    cam3d.dist = e.deltaY > 0 ? Math.min(cur * 1.15, autoDist * 4) : Math.max(cur * 0.87, scaleRef * 0.08);
     draw3d();
   }, { passive: false });
   canvas.addEventListener('dblclick', () => { cam3d.dist = null; draw3d(); });
@@ -77,7 +92,12 @@ export function draw3d() {
   function cross3(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
 
   const modelH   = totalFloors * eFH;
-  const dist     = cam3d.dist || (Math.max(R * 2, modelH) * 1.8 + 2);
+  const scaleRef = Math.max(R * 2, modelH);
+  // A manually-set dist can go stale relative to the model after a parameter
+  // change (e.g. n or height jumping a lot) — floor it at render time too, not
+  // just on the next wheel tick, so the camera can never end up inside the
+  // mesh no matter how the current dist was arrived at.
+  const dist     = cam3d.dist != null ? Math.max(cam3d.dist, scaleRef * 0.08) : (scaleRef * 1.8 + 2);
   const fovScale = Math.min(W, H) / (1.6 * dist);
   const cx2 = W / 2, cy2 = H / 2;
 

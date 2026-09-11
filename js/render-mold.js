@@ -3,6 +3,27 @@ import { getP } from './ui.js';
 import { computeGeometry, buildVerts } from './geometry.js';
 import { moldCam, ui } from './state.js';
 
+// Plate diagonal in cm — used by the wheel handler (to size the zoom range)
+// and by drawMold3d() (to floor a stale manual dist) so both always agree
+// with the model's actual physical size instead of a fixed absolute distance.
+// Mirrors the modelDiag calc in drawMold3d(); mold-tab gap is left out since
+// it only nudges the two plates apart and doesn't change the overall extent.
+function moldScaleRef(p, g) {
+  const { n, extcols, stack } = p;
+  const totalFloors = p.floors * stack;
+  const baseT  = (p.moldbase || 3) / 10;
+  const ridgeH = (p.ridgeh   || 1.2) / 10;
+  const margin = 0.2;
+  const { verts, extS, seamlS, seamrS } = buildVerts(p, g);
+  const olIdx = extcols, orIdx = extcols + n;
+  const [x0, y0] = verts[0][olIdx], [x1] = verts[0][orIdx];
+  const [, y3]   = verts[totalFloors][orIdx];
+  const topY = y0 - extS, botY = y3 + extS;
+  const seamLX = x0 - seamlS, seamRX = x1 + seamrS;
+  const pw = seamRX - seamLX + margin * 2, ph = botY - topY + margin * 2;
+  return Math.hypot(pw, ph, baseT + ridgeH) * 0.8;
+}
+
 export function initMold3d() {
   const canvas = document.getElementById('canvasMold');
   if (!canvas) return;
@@ -27,8 +48,11 @@ export function initMold3d() {
   };
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    const cur = moldCam.dist || 12;
-    moldCam.dist = e.deltaY > 0 ? Math.min(cur * 1.15, 60) : Math.max(cur * 0.87, 1);
+    const p = getP(), g = computeGeometry(p);
+    const modelDiag = moldScaleRef(p, g);
+    const autoDist  = modelDiag * 2.2 + 2;
+    const cur = moldCam.dist || autoDist;
+    moldCam.dist = e.deltaY > 0 ? Math.min(cur * 1.15, autoDist * 4) : Math.max(cur * 0.87, modelDiag * 0.15);
     drawMold3d();
   }, { passive: false });
   canvas.addEventListener('dblclick', () => { moldCam.dist = null; drawMold3d(); });
@@ -79,7 +103,10 @@ export function drawMold3d() {
     return [x1, y*cosRX - z1*sinRX, y*sinRX + z1*cosRX];
   }
   const modelDiag = Math.hypot(pw, ph, baseT + ridgeH) * 0.8;
-  const dist      = moldCam.dist || modelDiag * 2.2 + 2;
+  // Floor a stale manual dist at render time too (see moldScaleRef above) —
+  // covers a parameter change that shrinks the plate a lot without a fresh
+  // wheel tick to re-clamp it.
+  const dist      = moldCam.dist != null ? Math.max(moldCam.dist, modelDiag * 0.15) : modelDiag * 2.2 + 2;
   const fovScale  = Math.min(W, H) / (1.6 * dist);
   function project([x, y, z]) {
     const [rx, ry, rz] = rotate([x - cx_, y, z - cz_]);
