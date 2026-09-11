@@ -283,5 +283,280 @@ console.log('\nbuckling.js — snap-through vs. Euler/shell buckling');
   });
 }
 
+console.log('\nexplorer.js — Design Explorer grid search (axis generation + requirement gating)');
+// explorer.js composes geometry.js/buckling.js over a 2-D grid the sidebar can
+// only explore one point at a time; runExplorer()/evalCell() are its own
+// logic (not re-tested physics) and had zero coverage. Driven through the
+// real exported runExplorer() with a minimal DOM shim (same technique as the
+// exports.js STL tests above) rather than re-implementing axisValues/evalCell
+// here, so a regression in the actual grid-generation or requirement-gating
+// code gets caught.
+{
+  const { runExplorer } = await import('../js/explorer.js');
+
+  // Generic fake DOM: every element is created lazily and keeps whatever
+  // value/checked/textContent is set on it, so runExplorer's reads/writes
+  // round-trip exactly like a real form + canvas + status line would.
+  function explorerDom(fields) {
+    const store = new Map();
+    function el(id) {
+      if (!store.has(id)) {
+        store.set(id, {
+          id, value: '0', checked: false,
+          classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+          style: {}, querySelectorAll: () => [], addEventListener(){},
+          getContext: () => new Proxy({}, { get(){ return function(){ return {}; }; } }),
+          getBoundingClientRect: () => ({ width: 400, height: 400, left: 0, top: 0 }),
+          parentElement: { clientWidth: 400, clientHeight: 400 },
+        });
+      }
+      return store.get(id);
+    }
+    for (const [id, v] of Object.entries(fields)) {
+      const e = el(id);
+      if (typeof v === 'boolean') e.checked = v; else e.value = String(v);
+    }
+    global.document = { getElementById: el };
+    global.window = global;
+    return { text: id => el(id).textContent };
+  }
+
+  const BASE_FIXED = {
+    'exp-dia': 4, 'exp-height': 16, 'exp-floors': 8, 'exp-stack': 1, 'exp-n': 6, 'exp-angle': 105,
+    'exp-thick': 50, 'exp-chir': 1,
+    'n-dia': 4, 'n-height': 16, 'n-n': 6, 'n-floors': 8, 'n-angle': 105, 'n-ext': 1.5, 'n-seaml': 1.57,
+    'n-seamr': 1.57, 'n-extcols': 1, 'n-stack': 1, 'n-scale': 100, 'n-compress': 0, 'n-wallmm': 0.8,
+    'n-moldbase': 3, 'n-ridgeh': 1.2, 'n-ridgew': 0.6, 'n-thick': 50, chir: 1, material: 'polyimide',
+    showmv: true, showA4: true, showGrid: true, showMountain: true, showValley: true, showDiagonal: true,
+    'exp-req-bistable': false, 'exp-req-buckling': false, 'exp-req-a4': false,
+    'exp-safety': 1.5, 'exp-endcond': 'pinned',
+  };
+
+  function gridTotals(text) {
+    const m = /(\d+)\s*\/\s*(\d+)/.exec(text || '');
+    if (!m) throw new Error(`exp-status has no "x / y" summary: ${text}`);
+    return { passers: Number(m[1]), total: Number(m[2]) };
+  }
+
+  test('integer axis (n) yields exactly one grid point per integer in [min,max]', () => {
+    const dom = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'n', 'exp-yaxis': 'angle',
+      'exp-xmin': 3, 'exp-xmax': 8, 'exp-xsteps': 999, // steps must be ignored for an integer axis
+      'exp-ymin': 105, 'exp-ymax': 105, 'exp-ysteps': 4,
+    });
+    runExplorer();
+    const { total } = gridTotals(dom.text('exp-status'));
+    assert.equal(total, (8 - 3 + 1) * (4 + 1), `expected 6 n-values x 5 angle-values, got total=${total}`);
+  });
+
+  test('continuous axis keeps at least 2 divisions even when 0 or 1 steps are requested', () => {
+    const dom = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'dia', 'exp-yaxis': 'thick',
+      'exp-xmin': 1, 'exp-xmax': 1, 'exp-xsteps': 0,
+      'exp-ymin': 10, 'exp-ymax': 10, 'exp-ysteps': 1,
+    });
+    runExplorer();
+    const { total } = gridTotals(dom.text('exp-status'));
+    assert.equal(total, 3 * 3, `expected steps clamped up to >=2 divisions each (3x3=9), got total=${total}`);
+  });
+
+  test('reqBistable gates passers: bistable6-preset point passes, monostable-preset point does not', () => {
+    const domA = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
+      'exp-ymin': 105, 'exp-ymax': 105, 'exp-ysteps': 3,
+      'exp-req-bistable': true,
+    }); // matches PRESETS.bistable6 exactly (known bistable, see geometry.js tests above)
+    runExplorer();
+    const a = gridTotals(domA.text('exp-status'));
+    assert.equal(a.passers, a.total, `expected every cell to pass (known-bistable preset), got ${a.passers}/${a.total}`);
+
+    const domB = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
+      'exp-ymin': 100, 'exp-ymax': 100, 'exp-ysteps': 3,
+      'exp-dia': 3, 'exp-height': 24, 'exp-floors': 6, 'exp-stack': 1,
+      'n-ext': 1, 'n-seaml': 0, 'n-seamr': 0, 'n-extcols': 0,
+      'exp-req-bistable': true,
+    }); // matches PRESETS.monostable exactly (known non-bistable)
+    runExplorer();
+    const b = gridTotals(domB.text('exp-status'));
+    assert.equal(b.passers, 0, `expected no cells to pass (known-monostable preset), got ${b.passers}/${b.total}`);
+  });
+
+  test('reqA4 gates out an oversized design and keeps an undersized one', () => {
+    // Sizes verified directly against geometry.js's own patternBounds()
+    // (0.70x0.44cm vs 216.97x104.00cm against a 21x29.7cm A4 sheet) rather
+    // than hand-derived, so this tracks the real formula, not a guess at it.
+    const small = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
+      'exp-ymin': 100, 'exp-ymax': 100, 'exp-ysteps': 2,
+      'exp-dia': 1, 'exp-height': 2, 'exp-floors': 2, 'exp-stack': 1,
+      'n-ext': 0.1, 'n-seaml': 0, 'n-seamr': 0, 'n-extcols': 0, 'n-scale': 20,
+      'exp-req-a4': true,
+    });
+    runExplorer();
+    const s = gridTotals(small.text('exp-status'));
+    assert.equal(s.passers, s.total, `expected the tiny design to fit A4, got ${s.passers}/${s.total}`);
+
+    const big = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
+      'exp-ymin': 100, 'exp-ymax': 100, 'exp-ysteps': 2,
+      'exp-dia': 50, 'exp-height': 100, 'exp-floors': 10, 'exp-stack': 1,
+      'n-ext': 2, 'n-seaml': 2, 'n-seamr': 2, 'n-extcols': 1, 'n-scale': 100,
+      'exp-req-a4': true,
+    });
+    runExplorer();
+    const bstat = gridTotals(big.text('exp-status'));
+    assert.equal(bstat.passers, 0, `expected the oversized design to fail A4 fit, got ${bstat.passers}/${bstat.total}`);
+  });
+
+  test('reqBuckling gates out a design whose margin falls below the safety factor', () => {
+    // Margins verified directly against buckling.js's bucklingCheck(): the
+    // PRESETS.tower shape at 50um margins ~186x, at 1200um margins ~1.13x
+    // (< the 1.5x safety factor requested here).
+    const safe = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
+      'exp-ymin': 95, 'exp-ymax': 95, 'exp-ysteps': 2,
+      'exp-dia': 2.5, 'exp-height': 30, 'exp-floors': 16, 'exp-stack': 2, 'exp-thick': 50,
+      'n-ext': 1.5, 'n-seaml': 1.31, 'n-seamr': 1.31, 'n-extcols': 1, 'n-scale': 80,
+      'exp-req-buckling': true, 'exp-safety': 1.5,
+    });
+    runExplorer();
+    const sSafe = gridTotals(safe.text('exp-status'));
+    assert.equal(sSafe.passers, sSafe.total, `expected the thin (50um) tower shape to pass, got ${sSafe.passers}/${sSafe.total}`);
+
+    const unsafe = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
+      'exp-ymin': 95, 'exp-ymax': 95, 'exp-ysteps': 2,
+      'exp-dia': 2.5, 'exp-height': 30, 'exp-floors': 16, 'exp-stack': 2, 'exp-thick': 1200,
+      'n-ext': 1.5, 'n-seaml': 1.31, 'n-seamr': 1.31, 'n-extcols': 1, 'n-scale': 80,
+      'exp-req-buckling': true, 'exp-safety': 1.5,
+    });
+    runExplorer();
+    const sUnsafe = gridTotals(unsafe.text('exp-status'));
+    assert.equal(sUnsafe.passers, 0, `expected the thick (1200um) tower shape to fail, got ${sUnsafe.passers}/${sUnsafe.total}`);
+  });
+
+  test('same axis chosen for X and Y aborts the run instead of computing a degenerate grid', () => {
+    const dom = explorerDom({ ...BASE_FIXED,
+      'exp-xaxis': 'n', 'exp-yaxis': 'n',
+      'exp-xmin': 3, 'exp-xmax': 8, 'exp-xsteps': 12,
+      'exp-ymin': 3, 'exp-ymax': 8, 'exp-ysteps': 12,
+    });
+    runExplorer();
+    assert.equal(dom.text('exp-status'), undefined, 'exp-status should never be touched when the axis guard fires');
+    assert.equal(dom.text('toast'), 'X and Y axis must be different');
+  });
+}
+
+console.log('\nhistory.js — undo/redo state stack');
+// history.js's captureState/undo/redo keep module-level history[]/historyIdx
+// singletons, so each scenario below imports a fresh copy (via a unique
+// query-string specifier — Node's ESM loader caches by full resolved URL,
+// so this really does re-run the module and reset its state) instead of
+// sharing state across tests.
+{
+  const { paramPairs } = await import('../js/constants.js');
+  const ANGLE = 'n-angle';
+
+  function historyDom() {
+    const store = new Map();
+    function el(id) {
+      if (!store.has(id)) {
+        store.set(id, { id, value: '0', checked: false,
+          classList: { add(){}, remove(){}, contains(){ return false; } } });
+      }
+      return store.get(id);
+    }
+    paramPairs.forEach(([rid, nid]) => { el(rid); el(nid); });
+    el('chir').value = '1';
+    el('material').value = 'polyimide';
+    el('seam-auto-cb').checked = true;
+    global.document = { getElementById: el };
+    global.window = global;
+    return el;
+  }
+
+  {
+    const { captureState, undo, redo } = await import(`../js/history.js?t=${Math.random()}`);
+    const el = historyDom();
+    let draws = 0; const draw = () => draws++;
+    test('captureState + undo restores the previous value', () => {
+      el(ANGLE).value = '100'; captureState();
+      el(ANGLE).value = '105'; captureState();
+      undo(draw);
+      assert.equal(el(ANGLE).value, '100');
+      assert.equal(draws, 1);
+    });
+    test('redo reapplies the value that was undone', () => {
+      redo(draw);
+      assert.equal(el(ANGLE).value, '105');
+      assert.equal(draws, 2);
+    });
+  }
+
+  {
+    const { captureState, undo } = await import(`../js/history.js?t=${Math.random()}`);
+    const el = historyDom();
+    let draws = 0; const draw = () => draws++;
+    test('undo below the oldest snapshot is a no-op', () => {
+      el(ANGLE).value = '42'; captureState();
+      undo(draw);
+      assert.equal(el(ANGLE).value, '42', 'value should not change');
+      assert.equal(draws, 0, 'draw should not be called when there is nothing to undo');
+    });
+  }
+
+  {
+    const { captureState, redo } = await import(`../js/history.js?t=${Math.random()}`);
+    const el = historyDom();
+    let draws = 0; const draw = () => draws++;
+    test('redo past the newest snapshot is a no-op', () => {
+      el(ANGLE).value = '10'; captureState();
+      el(ANGLE).value = '20'; captureState();
+      redo(draw);
+      assert.equal(el(ANGLE).value, '20');
+      assert.equal(draws, 0, 'draw should not be called when there is nothing to redo');
+    });
+  }
+
+  {
+    const { captureState, undo, redo } = await import(`../js/history.js?t=${Math.random()}`);
+    const el = historyDom();
+    let draws = 0; const draw = () => draws++;
+    test('a fresh capture after an undo discards the redo branch', () => {
+      el(ANGLE).value = '100'; captureState();
+      el(ANGLE).value = '105'; captureState();
+      undo(draw); // back to 100
+      el(ANGLE).value = '999'; captureState(); // new branch, should discard the 105 snapshot
+      redo(draw); // nothing to redo now
+      assert.equal(el(ANGLE).value, '999', 'redo should not resurrect the discarded 105 branch');
+      undo(draw); // should land on 100 (the state right before the new branch)...
+      assert.equal(el(ANGLE).value, '100',
+        'undo should land on the pre-branch value, not a stale 105 snapshot left over from the discarded redo branch');
+      undo(draw); // ...and nowhere else, since 100 was the very first snapshot
+      assert.equal(el(ANGLE).value, '100', 'should already be at the oldest snapshot');
+    });
+  }
+
+  {
+    const { captureState, undo } = await import(`../js/history.js?t=${Math.random()}`);
+    const el = historyDom();
+    const draw = () => {};
+    test('history stack is capped, so undo cannot reach further back than the cap allows', () => {
+      for (let i = 0; i < 100; i++) { el(ANGLE).value = String(i); captureState(); }
+      let steps = 0;
+      for (;;) {
+        const before = el(ANGLE).value;
+        undo(draw);
+        if (el(ANGLE).value === before) break; // hit the no-op floor
+        steps++;
+        if (steps > 200) throw new Error('undo never reached the floor - is the cap gone?');
+      }
+      assert.ok(steps < 99, `uncapped history would let undo walk back all 99 steps; got ${steps}`);
+      assert.equal(el(ANGLE).value, String(100 - 1 - steps), 'oldest reachable snapshot should be the earliest one the cap retained');
+    });
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
