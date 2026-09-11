@@ -56,6 +56,19 @@ export function initMold3d() {
     drawMold3d();
   }, { passive: false });
   canvas.addEventListener('dblclick', () => { moldCam.dist = null; drawMold3d(); });
+
+  // The sidebar/right-panel drag handles reflow this pane's width without
+  // calling drawMold3d() themselves (they only redraw the flat/3D-tube
+  // panels they know about), so without this the canvas backing store is
+  // left at its old pixel size while its CSS size follows the new layout —
+  // every drawn pixel ends up stretched non-uniformly until something else
+  // (a tab switch, a window resize) happens to trigger a redraw. drawMold3d()
+  // already re-measures the wrap and resizes the canvas when needed, so
+  // just needs to be called whenever this pane's box actually changes size.
+  if (window.ResizeObserver && !wrap._kreslingMoldResizeObserved) {
+    wrap._kreslingMoldResizeObserved = true;
+    new ResizeObserver(() => drawMold3d()).observe(wrap);
+  }
 }
 
 export function drawMold3d() {
