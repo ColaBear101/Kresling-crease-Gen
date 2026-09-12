@@ -4,7 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Kresling Crease Generator v24</title>
-<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/toolbar.css">
+<link rel="stylesheet" href="css/sidebar.css">
+<link rel="stylesheet" href="css/main-panels.css">
+<link rel="stylesheet" href="css/explorer.css">
+<link rel="stylesheet" href="css/modal.css">
+<link rel="stylesheet" href="css/misc.css">
+<link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
 <div class="app">
@@ -60,7 +67,7 @@
         </select>
       </div>
       <div class="ctrl" title="Sheet thickness — only affects the energy graph when Sheet material = Polyimide"><label>Thickness (µm)</label><div class="ctrl-right"><input type="range" id="r-thick" min="6" max="125" step="0.5" value="50"><input class="num-inp" id="n-thick" type="number" min="6" max="125" step="0.5" value="50"></div></div>
-      <div style="font-size:9px;line-height:1.5;color:var(--text3);padding:4px 6px 8px;font-family:'JetBrains Mono',monospace" title="k_fold = E&#183;t&#179;&#183;L / (12&#183;(1&#8722;&#957;&#178;)&#183;w) — thin-plate torsional hinge, per Schenk &amp; Guest (2011) and Filipov, Tachi &amp; Paulino, PNAS (2015). E, &#957; for polyimide: DuPont Kapton&#174; HN datasheet (ASTM D-882). Effective bend width w is a modelling assumption, not a cited value — see js/material.js.">
+      <div style="font-size:9px;line-height:1.5;color:var(--text3);padding:4px 6px 8px;font-family:'JetBrains Mono',monospace" title="k_fold = E&#183;t&#179;&#183;L / (12&#183;(1&#8722;&#957;&#178;)&#183;w) — thin-plate torsional hinge, per Schenk &amp; Guest (2011) and Filipov, Tachi &amp; Paulino, PNAS (2015). E, &#957; for polyimide: DuPont Kapton&#174; HN datasheet (ASTM D-882). Effective bend width w is a modelling assumption, not a cited value — see js/physics/material.js.">
         Sources: k formula — Schenk &amp; Guest (2011); Filipov, Tachi &amp; Paulino, <i>PNAS</i> (2015). E/&#957; — DuPont Kapton&#174; HN datasheet. ⓘ hover
       </div>
 
@@ -144,7 +151,7 @@
       </div>
       <!-- Design Explorer pane: requirements-in, possibilities-out grid search
            over two chosen design axes (default n × angle). See js/explorer.js
-           and js/buckling.js. -->
+           and js/physics/buckling.js. -->
       <div id="center-pane-explorer" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
         <div class="exp-scroll">
           <div class="exp-layout">

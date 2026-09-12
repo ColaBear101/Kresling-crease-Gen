@@ -9,7 +9,7 @@ import { getP, showToast } from './ui.js';
 // geometry.js is defined over), scoring every grid point against:
 //   • valid flat-pattern geometry (geometry.js:valid)
 //   • bistability, if required (Cai et al. 2015 criterion)
-//   • buckling safety, if required (js/buckling.js — Euler column + local
+//   • buckling safety, if required (js/physics/buckling.js — Euler column + local
 //     shell buckling vs. snap-through force, standard shell theory, not
 //     itself one of the Kresling-specific cited sources)
 //   • A4 sheet fit, if required

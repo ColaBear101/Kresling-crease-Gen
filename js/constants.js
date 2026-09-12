@@ -70,7 +70,7 @@ export const SOURCES = [
   {
     cite: 'Kidambi, N., & Wang, K. W. (2020). Dynamics of Kresling origami deployment. Physical Review E, 101(6), 063003.',
     url:  'https://doi.org/10.1103/PhysRevE.101.063003',
-    use:  '6-DOF truss model, mass/stiffness matrices, and axial vs. off-axis modal-frequency analysis behind the Modal frequencies panel (js/modal.js), reproducing their Fig. 13(b)',
+    use:  '6-DOF truss model, mass/stiffness matrices, and axial vs. off-axis modal-frequency analysis behind the Modal frequencies panel (js/physics/modal.js), reproducing their Fig. 13(b)',
   },
 ];
 
