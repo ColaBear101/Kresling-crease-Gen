@@ -96,4 +96,11 @@ node test/regression.mjs
 
 ---
 
+> "Nothing is permanent except change." — the Buddha
+>
+> A Kresling tube holds two stable equilibria and no others — it doesn't hover
+> in between. Every other configuration is transient, snapping toward one
+> resting state or the other the moment you let go, which happens to be
+> exactly what `js/physics/energy.js`'s energy curve plots.
+
 *(Vibecoded via Copilot in the beginning, now maintained by the lord Claude.)*
