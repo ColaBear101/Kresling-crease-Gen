@@ -46,12 +46,12 @@ input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 1px var(-
 .ctrl-check{display:flex;align-items:center;gap:6px;padding:3px 4px}
 .ctrl-check input[type=checkbox]{width:14px;height:14px;accent-color:var(--accent);cursor:pointer}
 .ctrl-check label{font-size:11px;color:var(--text2);cursor:pointer}
-.ctrl-select select{flex:1;font-size:11px;font-family:'DM Sans',sans-serif;padding:3px 6px;border:1px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);outline:none;cursor:pointer}
+.ctrl-select select{flex:1;min-width:0;font-size:11px;font-family:'DM Sans',sans-serif;padding:3px 6px;border:1px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text);outline:none;cursor:pointer;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
 .ctrl-select select:focus{border-color:var(--accent)}
 .scale-row{display:flex;align-items:center;gap:6px;padding:4px 4px 2px}
 .scale-row label{font-size:11px;color:var(--accent2);font-weight:500;width:90px;flex-shrink:0}
-.scale-full{display:flex;align-items:center;gap:4px;flex:1}
-.scale-full input[type=range]{flex:1;height:4px;accent-color:var(--accent2)}
+.scale-full{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.scale-full input[type=range]{flex:1;min-width:0;height:4px;accent-color:var(--accent2)}
 
 /* CENTER: flat canvas area */
 .flat-area{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;min-width:0}
