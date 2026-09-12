@@ -1,7 +1,7 @@
-import { A4_W, A4_H } from './constants.js';
-import { getP } from './ui.js';
-import { computeGeometry, buildVerts } from './geometry.js';
-import { moldCam, ui } from './state.js';
+import { A4_W, A4_H } from '../constants.js';
+import { getP } from '../ui.js';
+import { computeGeometry, buildVerts } from '../physics/geometry.js';
+import { moldCam, ui } from '../state.js';
 
 // Plate diagonal in cm — used by the wheel handler (to size the zoom range)
 // and by drawMold3d() (to floor a stale manual dist) so both always agree

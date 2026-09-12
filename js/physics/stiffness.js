@@ -1,4 +1,4 @@
-import { getP } from './ui.js';
+import { getP } from '../ui.js';
 import { computeGeometry } from './geometry.js';
 import { springConstants, MATERIALS } from './material.js';
 

@@ -1,7 +1,7 @@
 import { A4_W, A4_H } from './constants.js';
 import { getP, showToast, infoBoxSVGText, creaseLengthLabels, creaseLabelsSVGText } from './ui.js';
-import { computeGeometry, buildVerts } from './geometry.js';
-import { renderPatternToCtx } from './render-flat.js';
+import { computeGeometry, buildVerts } from './physics/geometry.js';
+import { renderPatternToCtx } from './render/render-flat.js';
 
 // ─── Shared SVG line-builder (used by exportSVG, and by exportPDF for both
 // its single-page and multi-page-tiled paths) ────────────────────────────────

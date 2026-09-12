@@ -1,4 +1,4 @@
-import { A4_W, A4_H } from './constants.js';
+import { A4_W, A4_H } from '../constants.js';
 
 // ─── Core geometry ───────────────────────────────────────────────────────────
 export function computeGeometry(p) {

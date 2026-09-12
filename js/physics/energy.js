@@ -1,6 +1,6 @@
-import { getP } from './ui.js';
+import { getP } from '../ui.js';
 import { computeGeometry } from './geometry.js';
-import { ui } from './state.js';
+import { ui } from '../state.js';
 import { springConstants } from './material.js';
 
 // Dihedral (fold) angles at the mountain crease AC (psi_m) and valley crease

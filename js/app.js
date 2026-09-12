@@ -1,12 +1,12 @@
 import { paramPairs, APP_VERSION } from './constants.js';
 import { getP, showToast, debounce, toggleSourcesModal } from './ui.js';
-import { computeGeometry, patternBounds } from './geometry.js';
-import { drawFlat, initFlatCanvasEvents } from './render-flat.js';
-import { init3d, draw3d } from './render-3d.js';
-import { initMold3d, drawMold3d } from './render-mold.js';
-import { drawEnergy, initEnergyEvents } from './energy.js';
-import { drawStiffness } from './stiffness.js';
-import { drawModal } from './modal.js';
+import { computeGeometry, patternBounds } from './physics/geometry.js';
+import { drawFlat, initFlatCanvasEvents } from './render/render-flat.js';
+import { init3d, draw3d } from './render/render-3d.js';
+import { initMold3d, drawMold3d } from './render/render-mold.js';
+import { drawEnergy, initEnergyEvents } from './physics/energy.js';
+import { drawStiffness } from './physics/stiffness.js';
+import { drawModal } from './physics/modal.js';
 import { captureState, undo as _undo, redo as _redo } from './history.js';
 import {
   seamAutoMode, setSeamAutoMode, loadPreset as _loadPreset,

@@ -1,7 +1,7 @@
-import { A4_W, A4_H } from './constants.js';
-import { computeGeometry, buildVerts } from './geometry.js';
-import { getP, updateStats, drawInfoBoxCanvas, creaseLengthLabels, drawCreaseLabelsCanvas } from './ui.js';
-import { flatCam } from './state.js';
+import { A4_W, A4_H } from '../constants.js';
+import { computeGeometry, buildVerts } from '../physics/geometry.js';
+import { getP, updateStats, drawInfoBoxCanvas, creaseLengthLabels, drawCreaseLabelsCanvas } from '../ui.js';
+import { flatCam } from '../state.js';
 
 // ─── Private: nearest-crease hit-test ────────────────────────────────────────
 function getNearestCrease(px, py, verts, p, g, toC) {

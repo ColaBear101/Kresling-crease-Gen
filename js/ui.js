@@ -1,6 +1,6 @@
 import { A4_W, A4_H, SOURCES, MODEL_NOTES, APP_VERSION } from './constants.js';
-import { patternBounds } from './geometry.js';
-import { sheetMassGrams } from './material.js';
+import { patternBounds } from './physics/geometry.js';
+import { sheetMassGrams } from './physics/material.js';
 
 // ─── DOM parameter readers ────────────────────────────────────────────────────
 export function getV(id)   { return parseFloat(document.getElementById('n-' + id).value); }

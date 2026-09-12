@@ -1,5 +1,5 @@
-import { computeGeometry, patternBounds } from './geometry.js';
-import { bucklingCheck } from './buckling.js';
+import { computeGeometry, patternBounds } from './physics/geometry.js';
+import { bucklingCheck } from './physics/buckling.js';
 import { A4_W, A4_H } from './constants.js';
 import { getP, showToast } from './ui.js';
 

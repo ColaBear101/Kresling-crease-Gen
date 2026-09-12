@@ -1,4 +1,4 @@
-import { getP } from './ui.js';
+import { getP } from '../ui.js';
 import { computeGeometry } from './geometry.js';
 
 // ─── Kidambi, N., & Wang, K. W. (2020). Dynamics of Kresling origami

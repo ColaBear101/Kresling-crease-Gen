@@ -1,6 +1,6 @@
-import { getP } from './ui.js';
-import { computeGeometry } from './geometry.js';
-import { cam3d } from './state.js';
+import { getP } from '../ui.js';
+import { computeGeometry } from '../physics/geometry.js';
+import { cam3d } from '../state.js';
 
 // Shared by the wheel handler and draw3d() so the zoom range always tracks
 // the model's actual physical size (cm) instead of a fixed absolute distance

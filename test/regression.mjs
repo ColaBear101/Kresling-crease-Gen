@@ -6,13 +6,13 @@
 // change that silently breaks one of these gets caught instead of shipped.
 
 import assert from 'node:assert/strict';
-import { computeGeometry } from '../js/geometry.js';
-import { sheetMassGrams } from '../js/material.js';
-import { computeModalSweep } from '../js/modal.js';
+import { computeGeometry } from '../js/physics/geometry.js';
+import { sheetMassGrams } from '../js/physics/material.js';
+import { computeModalSweep } from '../js/physics/modal.js';
 import { PRESETS } from '../js/constants.js';
 import { exportMoldSTL, exportSTL } from '../js/exports.js';
-import { getDihedral } from '../js/energy.js';
-import { springConstants } from '../js/material.js';
+import { getDihedral } from '../js/physics/energy.js';
+import { springConstants } from '../js/physics/material.js';
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -344,7 +344,7 @@ test("exportMoldSTL('valley') stays manifold when ridges are packed tighter than
 
 console.log('\nbuckling.js — snap-through vs. Euler/shell buckling');
 {
-  const { bucklingCheck, snapThroughForce, eulerColumnBuckling, shellLocalBuckling } = await import('../js/buckling.js');
+  const { bucklingCheck, snapThroughForce, eulerColumnBuckling, shellLocalBuckling } = await import('../js/physics/buckling.js');
 
   test('buckling check unavailable for generic (non-polyimide) material', () => {
     const p = { ...PRESETS.bistable6, chir: 1, material: 'generic' };
