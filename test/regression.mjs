@@ -6,13 +6,12 @@
 // change that silently breaks one of these gets caught instead of shipped.
 
 import assert from 'node:assert/strict';
-import { computeGeometry } from '../js/physics/geometry.js';
+import { computeGeometry, buildVerts, shapeAt, tubeRings, findBistableAngle, findMonostableAngle } from '../js/physics/geometry.js';
 import { sheetMassGrams } from '../js/physics/material.js';
 import { computeModalSweep } from '../js/physics/modal.js';
 import { PRESETS } from '../js/constants.js';
 import { exportMoldSTL, exportSTL } from '../js/exports.js';
-import { getDihedral } from '../js/physics/energy.js';
-import { springConstants } from '../js/physics/material.js';
+import { cellAt, foldEnergyPath, snapForce } from '../js/physics/foldpath.js';
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -20,28 +19,80 @@ function test(name, fn) {
   catch (e) { fail++; console.log(`FAIL  - ${name}\n        ${e.message}`); }
 }
 
-console.log('geometry.js — bistability (Cai et al. 2015 criterion)');
-// Preset names double as claims: bistable6/bistable8/tower should read
-// bistable; monostable/flat/compact should not. (See app.js session notes:
-// this replaced an ad-hoc h0/R heuristic, and separately fixed a dx-sign
-// bug that was silently disqualifying every obtuse-angle preset from being
-// flagged valid/bistable at all.)
-const expectBistable = { bistable6: true, bistable8: true, tower: true, monostable: false, flat: false, compact: false };
-for (const [name, expect] of Object.entries(expectBistable)) {
-  test(`preset "${name}" bistable === ${expect}`, () => {
-    const p = { ...PRESETS[name], chir: 1 };
-    const g = computeGeometry(p);
-    assert.equal(g.valid, true, 'geometry should be valid');
-    assert.equal(g.bistable, expect);
-  });
-}
+console.log('geometry.js — exact rigid folding (Guest & Pellegrino 1994)');
 
-test('bistability window matches closed form (1 < ratio < 1/sin(pi/n))', () => {
+// The printed crease pattern must not change: side = arc length pi*dia/n,
+// rows offset by +-dx, red runs 2*dx*chir, green runs 2*dx*chir - b.
+test('printed crease geometry is unchanged (side, floor height, red/green lengths, row offsets)', () => {
+  for (const [name, preset] of Object.entries(PRESETS)) {
+    for (const chir of [1, -1]) {
+      const p = { ...preset, chir, scale: 1 };
+      const g = computeGeometry(p);
+      const b = p.dia * Math.PI / p.n, fh = p.height / p.floors, dx = fh / Math.tan(p.angle * Math.PI / 180);
+      assert.ok(Math.abs(g.b - b) < 1e-12 && Math.abs(g.floor_h - fh) < 1e-12 && Math.abs(g.dx - dx) < 1e-12, `${name}: side/height/dx`);
+      assert.ok(Math.abs(g.red_len - Math.hypot(2 * dx, fh)) < 1e-12, `${name}: red`);
+      assert.ok(Math.abs(g.green_len - Math.hypot(2 * dx * chir - b, fh)) < 1e-12, `${name}: green`);
+      const { verts } = buildVerts(p, g);
+      const c = p.extcols;   // column 0 of the tube body
+      assert.ok(Math.abs((verts[0][c + 1][0] - verts[0][c][0]) - b) < 1e-9, `${name}: side in the drawing`);
+      assert.ok(Math.abs((verts[1][c][0] - verts[0][c][0]) - 2 * dx * chir) < 1e-9, `${name}: zig-zag offset`);
+      assert.ok(Math.abs((verts[1][c][1] - verts[0][c][1]) - fh) < 1e-9, `${name}: floor height in the drawing`);
+    }
+  }
+});
+
+test('both strain-free shapes give every printed crease its printed length in 3-D', () => {
+  const cases = [{ dia: 3, height: 20, n: 6, floors: 10, angle: 100, stack: 1 }, ...Object.values(PRESETS)];
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  let checked = 0;
+  for (const base of cases) for (const chir of [1, -1]) for (const angle of [base.angle, 70, 80, 92, 96, 100, 104, 110, 120]) {
+    const p = { ...base, chir, angle };
+    const g = computeGeometry(p);
+    for (const st of g.fold.states) {
+      if (!st.ok) continue;
+      // the real rings the 3-D view and the STL export both use
+      const [r0, r1, r2] = tubeRings(p.n, 2, { R: g.fold.R3, H: st.H, psi: st.psi });
+      assert.ok(Math.abs(dist(r0[0], r0[1]) - g.b) < 1e-9, 'polygon side');
+      assert.ok(Math.abs(dist(r0[0], r1[0]) - g.red_len) < 1e-9, 'red, floor 0');
+      assert.ok(Math.abs(dist(r0[1], r1[0]) - g.green_len) < 1e-9, 'green, floor 0 (goes left)');
+      assert.ok(Math.abs(dist(r1[0], r2[0]) - g.red_len) < 1e-9, 'red, floor 1');
+      assert.ok(Math.abs(dist(r1[0], r2[1]) - g.green_len) < 1e-9, 'green, floor 1 (goes right)');
+      checked++;
+    }
+  }
+  assert.ok(checked > 40, `only ${checked} shapes checked`);
+});
+
+test('default design is bistable: 1.80 cm -> 0.75 cm per floor', () => {
+  const g = computeGeometry({ dia: 3, height: 20, n: 6, floors: 10, angle: 100, stack: 1, chir: 1 });
+  assert.equal(g.bistable, true);
+  assert.ok(Math.abs(g.fold.deployed.H - 1.8032) < 1e-3 && Math.abs(g.fold.folded.H - 0.7463) < 1e-3);
+  assert.ok(Math.abs(g.extendLen - 18.032) < 1e-2 && Math.abs(g.foldLen - 7.463) < 1e-2);
+  assert.ok(g.foldInnerValid && g.foldInnerDia > 0 && g.foldInnerDia < g.trueDia);
+  assert.ok(Math.abs(g.trueDia - 3 * Math.PI / 6 / Math.sin(Math.PI / 6)) < 1e-12);
+  assert.ok(Math.abs(g.drawnAngle - 109.43) < 0.01, `drawn angle ${g.drawnAngle}`);
+});
+
+test('stock presets under exact folding (preset values deliberately unchanged)', () => {
+  // name: [bistable, has a strain-free shape]
+  const expect = { bistable6: [false, false], bistable8: [false, true], tower: [false, true], monostable: [false, false], flat: [false, true], compact: [false, false] };
+  for (const [name, [bi, rigid]] of Object.entries(expect)) {
+    const g = computeGeometry({ ...PRESETS[name], chir: 1 });
+    assert.equal(g.valid, true, `${name} valid`);
+    assert.equal(g.bistable, bi, `${name} bistable`);
+    assert.equal(g.rigidOk, rigid, `${name} strain-free shape`);
+    assert.ok(typeof g.foldReason === 'string' && g.foldReason.length > 10, `${name} explains why`);
+  }
+  // "Bistable n=6" misses by 1.2 %: closing it needs |k| = 1.0117 > 1
+  assert.ok(Math.abs(computeGeometry({ ...PRESETS.bistable6, chir: 1 }).fold.k + 1.0117) < 1e-3);
+});
+
+test('Cai et al. (2015) ratio is still computed, for reference only', () => {
   const p = { ...PRESETS.bistable6, chir: 1 };
   const g = computeGeometry(p);
-  const expectedMax = 1 / Math.sin(Math.PI / p.n);
-  assert.ok(Math.abs(g.bistableMax - expectedMax) < 1e-9);
-  assert.ok(g.bLengthRatio > 1 && g.bLengthRatio < g.bistableMax);
+  assert.ok(Math.abs(g.bistableMax - 1 / Math.sin(Math.PI / p.n)) < 1e-9);
+  assert.equal(g.caiBistable, true);   // the ratio test says yes; no strain-free fold exists
+  assert.equal(g.bistable, false);
 });
 
 test('dx sign fix: obtuse-angle default preset is geometrically valid', () => {
@@ -54,12 +105,6 @@ test('dx sign fix: obtuse-angle default preset is geometrically valid', () => {
 });
 
 test('n < 3 is flagged invalid instead of silently producing NaN/Infinity geometry', () => {
-  // b = dia*PI/n -> Infinity at n=0, and `Infinity > anything` makes the old
-  // `|dx| < b` validity check pass vacuously, so buildVerts went on to emit
-  // NaN vertex coordinates under a "valid: true" geometry. n=1/2 aren't
-  // polygons either (and would let a "1-gon"/"2-gon" get flagged bistable
-  // via the closed-form ratio, since bistableMax=1/sin(pi/n) doesn't itself
-  // reject small n). Require n >= 3 explicitly.
   const base = { dia: 3, height: 20, floors: 10, angle: 100, stack: 1, chir: 1 };
   for (const n of [0, 1, 2]) {
     const g = computeGeometry({ ...base, n });
@@ -70,44 +115,45 @@ test('n < 3 is flagged invalid instead of silently producing NaN/Infinity geomet
   assert.equal(g3.valid, true, 'n=3 is a legitimate polygon and should remain valid');
 });
 
-test('snap-to-bistable grid search lands inside the window for the default preset', () => {
+test('snap to bistable lands in the middle of the exact bistable range', () => {
   const base = { dia: 3, height: 20, n: 6, floors: 10, stack: 1, chir: 1 };
-  const angMin = 60, angMax = 140, STEPS = 1600;
-  let best = null, bestScore = Infinity, bestG = null;
-  for (let i = 0; i <= STEPS; i++) {
-    const angle = angMin + (angMax - angMin) * i / STEPS;
-    const g = computeGeometry({ ...base, angle });
-    if (!g.valid) continue;
-    const target = (1 + g.bistableMax) / 2;
-    const inWindow = g.bLengthRatio > 1 && g.bLengthRatio < g.bistableMax;
-    const score = inWindow ? Math.abs(g.bLengthRatio - target)
-      : 1000 + Math.min(Math.abs(g.bLengthRatio - 1), Math.abs(g.bLengthRatio - g.bistableMax));
-    if (score < bestScore) { bestScore = score; best = angle; bestG = g; }
-  }
-  assert.ok(bestG.bistable, 'grid search should find a genuinely bistable angle');
-  assert.ok(Math.abs(best - 72.7) < 0.5, `expected ~72.7deg, got ${best}`);
+  const r = findBistableAngle(base, 60, 140);
+  assert.ok(r && r.g.bistable, 'should land on a bistable angle');
+  assert.ok(Math.abs(r.window.lo - 99.25) < 0.1 && Math.abs(r.window.hi - 101.1) < 0.1, JSON.stringify(r.window));
+  assert.ok(Math.abs(r.angle - 100.2) < 0.15, `got ${r.angle}`);
+  // the old ratio-window target, 72.7 deg, folds into a single stable shape
+  assert.equal(computeGeometry({ ...base, angle: 72.7 }).bistable, false);
 });
 
-test('snap-to-monostable grid search lands outside the window, with a safety margin, for the default preset', () => {
+test('snap to monostable picks 90 deg for the default preset, away from the bistable range', () => {
   const base = { dia: 3, height: 20, n: 6, floors: 10, stack: 1, chir: 1 };
-  const angMin = 60, angMax = 140, STEPS = 1600;
-  const candidates = [];
-  for (let i = 0; i <= STEPS; i++) {
-    const angle = angMin + (angMax - angMin) * i / STEPS;
-    const g = computeGeometry({ ...base, angle });
-    if (!g.valid) continue;
-    const below = g.bLengthRatio <= 1, above = g.bLengthRatio >= g.bistableMax;
-    if (!below && !above) continue;
-    const margin = below ? (1 - g.bLengthRatio) : (g.bLengthRatio - g.bistableMax);
-    candidates.push({ angle, g, margin });
-  }
-  assert.ok(candidates.length > 0, 'expected at least one monostable angle in range');
-  const safe = candidates.filter(c => c.margin >= 0.05);
-  const pool = safe.length ? safe : candidates;
-  let best = pool[0];
-  for (const c of pool) if (Math.abs(c.angle - 90) < Math.abs(best.angle - 90)) best = c;
-  assert.equal(best.g.bistable, false);
-  assert.ok(Math.abs(best.angle - 122.25) < 0.5, `expected ~122.25deg, got ${best.angle}`);
+  const r = findMonostableAngle(base, 60, 140);
+  assert.ok(r && !r.g.bistable && r.g.rigidOk && !r.marginal);
+  assert.ok(Math.abs(r.angle - 90) < 1e-9, `got ${r.angle}`);
+});
+
+test('a second shape that needs a crease to turn past 180 deg is not reachable', () => {
+  // The long diagonal's turn must stay below 180 deg on the way from the
+  // deployed shape; wrapping it the short way round would wrongly accept
+  // a folded shape that passes through the tube axis.
+  const p = { ...PRESETS.monostable, chir: 1, angle: 81.8 };
+  const g = computeGeometry(p);
+  assert.equal(g.rigidOk, true);
+  assert.equal(g.bistable, false);
+  assert.ok(g.fold.folded.phi > Math.PI, `folded turn ${g.fold.folded.phi}`);
+  assert.match(g.foldReason, /through the tube axis/);
+  for (const st of g.fold.states) if (st.ok) assert.ok(st.phi < Math.PI);
+});
+
+test('3-D view: strain-free at both ends of the fold slider, red crease kept in between', () => {
+  const g = computeGeometry({ dia: 3, height: 20, n: 6, floors: 10, angle: 100, stack: 1, chir: 1 });
+  const a = shapeAt(g, 0), b = shapeAt(g, 1), m = shapeAt(g, 0.5);
+  assert.ok(a.exact && b.exact && !m.exact);
+  assert.ok(Math.abs(a.H - g.fold.deployed.H) < 1e-12 && Math.abs(b.H - g.fold.folded.H) < 1e-12);
+  const red = (s) => Math.hypot(s.H, 2 * s.R * Math.sin(s.psi / 2));
+  for (const s of [a, m, b]) assert.ok(Math.abs(red(s) - g.red_len) < 1e-9);
+  const none = shapeAt(computeGeometry({ ...PRESETS.bistable6, chir: 1 }), 0);
+  assert.ok(!none.exact && /no strain-free/.test(none.note));
 });
 
 console.log('\nmaterial.js — sheet mass');
@@ -117,12 +163,9 @@ test('sheetMassGrams: density x thickness x area, polyimide only', () => {
   assert.equal(sheetMassGrams({ material: 'generic' }, 500), null);
 });
 
-console.log('\nenergy.js — dihedral-angle bending energy (arc-length model)');
-// Independent cross-check of getDihedral()'s two dihedral angles against a
-// standard 4-point torsion-angle formula (as used in molecular geometry),
-// applied to the same A,B,C,D crease-pattern points. This is the "measure
-// against the real code with an independently-derived formula" check the
-// project asks for, rather than trusting a hand re-derivation.
+console.log('\nfoldpath.js — energy along the exact fold path');
+// Independent cross-check of cellAt()'s two dihedral angles against a
+// standard 4-point torsion-angle formula, applied to the same panel corners.
 function torsionAngle(p0, p1, p2, p3) {
   const sub   = ([ax,ay,az],[bx,by,bz]) => [ax-bx,ay-by,az-bz];
   const cross = ([ax,ay,az],[bx,by,bz]) => [ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
@@ -132,98 +175,72 @@ function torsionAngle(p0, p1, p2, p3) {
   const m1 = norm(cross(b1,b2)), m2 = norm(cross(b2,b3));
   return Math.acos(Math.max(-1, Math.min(1, dot(m1,m2))));
 }
-function creasePoints(h, L_r0, R, n) {
-  const dxH = Math.sqrt(Math.max(0, L_r0*L_r0 - h*h));
-  const phi = dxH / R, alpha = Math.PI / n;
-  const A = [R,0,0];
-  const B = [R*Math.cos(2*alpha), R*Math.sin(2*alpha), 0];
-  const C = [R*Math.cos(phi)*Math.cos(alpha)-R*Math.sin(phi)*Math.sin(alpha),
-             R*Math.cos(phi)*Math.sin(alpha)+R*Math.sin(phi)*Math.cos(alpha), h];
-  const D = [R*Math.cos(phi+2*alpha), R*Math.sin(phi+2*alpha), h];
-  return { A, B, C, D };
-}
-test('getDihedral matches an independent torsion-angle formula (psi_m and psi_v)', () => {
-  for (const name of ['bistable6', 'bistable8', 'tower', 'monostable', 'compact']) {
-    const p = { ...PRESETS[name], chir: 1 };
-    const g = computeGeometry(p);
-    const L_r0 = g.red_len;
-    for (const frac of [0.1, 0.4, 0.7, 0.95]) {
-      const h = L_r0*0.02 + frac*(L_r0*0.999 - L_r0*0.02);
-      const { A, B, C, D } = creasePoints(h, L_r0, g.R, p.n);
-      const d = getDihedral(h, L_r0, g.R, p.n);
-      // fold-angle convention used throughout energy.js is pi - torsion angle
-      const psi_m_expected = Math.PI - torsionAngle(B, A, C, D);
-      const psi_v_expected = Math.PI - torsionAngle(A, B, C, D);
-      assert.ok(Math.abs(d.psi_m - psi_m_expected) < 1e-9, `${name}@${frac}: psi_m ${d.psi_m} vs ${psi_m_expected}`);
-      assert.ok(Math.abs(d.psi_v - psi_v_expected) < 1e-9, `${name}@${frac}: psi_v ${d.psi_v} vs ${psi_v_expected}`);
+test('cellAt dihedrals match an independent torsion-angle formula', () => {
+  for (const [n, R, H, psi] of [[6, 1.6, 1.8, 0.4], [6, 1.6, 0.7, 1.9], [8, 2.1, 1.1, -0.9], [5, 1.2, 0.4, 2.3]]) {
+    const a = 2 * Math.PI / n;
+    const bot = (k) => [R*Math.cos(k*a), R*Math.sin(k*a), 0];
+    const top = (k) => [R*Math.cos(k*a+psi), R*Math.sin(k*a+psi), H];
+    const c = cellAt(n, R, H, psi);
+    // red crease A0-T0 between panels (A0,A1,T0) and (A0,T0,T-1)
+    const m = Math.PI - torsionAngle(bot(1), bot(0), top(0), top(-1));
+    // green crease A0-T-1 between panels (A-1,A0,T-1) and (A0,T0,T-1)
+    const v = Math.PI - torsionAngle(bot(-1), top(-1), bot(0), top(0));
+    assert.ok(Math.abs(c.psi_m - m) < 1e-9, `psi_m ${c.psi_m} vs ${m}`);
+    assert.ok(Math.abs(c.psi_v - v) < 1e-9, `psi_v ${c.psi_v} vs ${v}`);
+  }
+});
+test('green crease has its printed length at both strain-free shapes', () => {
+  let checked = 0;
+  for (const name of Object.keys(PRESETS)) for (const chir of [1, -1]) for (let angle = 60; angle <= 140; angle += 2.5) {
+    const g = computeGeometry({ ...PRESETS[name], chir, angle });
+    if (!g.valid || !g.rigidOk) continue;
+    for (const st of g.fold.states) if (st.ok) {
+      assert.ok(Math.abs(cellAt(g.n, g.fold.R3, st.H, st.psi).green - g.green_len) < 1e-9, `${name} ${chir} ${angle}`);
+      checked++;
     }
   }
+  assert.ok(checked > 40, `only ${checked} shapes checked`);
 });
-test('psi_v actually varies with h instead of being pinned at a constant (regression for the n3/n4 valley-face bug)', () => {
-  // n3 used to be built from only A, B, C (the same face as n1, never
-  // touching D), so dot(n1,n3) was identically 1 and psi_v = acos(-1) = pi
-  // for every h. A real valley dihedral must vary continuously across the
-  // sweep, the same way psi_m already did.
-  const p = { ...PRESETS.bistable6, chir: 1 };
-  const g = computeGeometry(p);
-  const L_r0 = g.red_len;
-  const lo = getDihedral(L_r0*0.05, L_r0, g.R, p.n);
-  const hi = getDihedral(L_r0*0.95, L_r0, g.R, p.n);
-  assert.ok(Math.abs(lo.psi_v - hi.psi_v) > 0.5, `psi_v barely changed: ${lo.psi_v} -> ${hi.psi_v}`);
-  assert.ok(Math.abs(lo.psi_v - Math.PI) > 1e-6 || Math.abs(hi.psi_v - Math.PI) > 1e-6,
-    'psi_v should not be pinned at pi across the sweep');
-});
-
-// Minimal re-implementation of drawEnergy()'s minima-finding loop (that
-// logic lives inside the canvas-drawing function, not exported), to check
-// it against known-bistable/monostable presets the way geometry.js's own
-// tests check g.bistable above.
-function findEnergyMinima(p) {
-  const g = computeGeometry(p);
-  const totalFloors = p.floors * p.stack;
-  const L_r0 = g.red_len, h_max = L_r0*0.999, h_min = L_r0*0.02, STEPS = 400;
-  const rest = getDihedral(g.floor_h, L_r0, g.R, p.n);
-  const { k_m, k_v } = springConstants(p, g);
-  const energyPoints = [], heightPoints = [];
-  for (let i = 0; i <= STEPS; i++) {
-    const h = h_min + (i/STEPS) * (h_max - h_min);
-    const a = getDihedral(h, L_r0, g.R, p.n);
-    const E = a ? (k_m*(a.psi_m-rest.psi_m)**2 + k_v*(a.psi_v-rest.psi_v)**2) * p.n * totalFloors : 0;
-    energyPoints.push(E); heightPoints.push(h * totalFloors);
-  }
-  const WINDOW = 8;
-  const localMinima = [];
-  for (let i = 1; i < energyPoints.length - 1; i++) {
-    const w = Math.min(WINDOW, i, energyPoints.length - 1 - i);
-    let isMin = true;
-    for (let j = i-w; j <= i+w; j++) { if (j!==i && energyPoints[j]<=energyPoints[i]) { isMin = false; break; } }
-    if (isMin) localMinima.push({ h: heightPoints[i], E: energyPoints[i] });
-  }
-  const mergedMinima = [];
-  let lastH = -Infinity;
-  for (const m of localMinima) {
-    if (m.h - lastH > (h_max-h_min)*totalFloors*0.05) { mergedMinima.push(m); lastH = m.h; }
-  }
-  return mergedMinima;
+function pathMinima(path) {
+  const out = [];
+  const E = path.E, last = E.length - 1;
+  if (E[0] < E[1]) out.push(path.H[0]);
+  for (let i = 1; i < last; i++) if (E[i] < E[i-1] && E[i] <= E[i+1]) out.push(path.H[i]);
+  if (E[last] < E[last-1]) out.push(path.H[last]);
+  return out;
 }
-test('local-minima detection finds the designed-height minimum for every stock preset, including ones where it sits near the sweep edge', () => {
-  // "tower" and the n=20 case both have floor_h within 8 samples of h_max
-  // (out of 400) — the un-clamped fixed-width WINDOW used to exclude that
-  // whole band from consideration, so the always-present minimum at the
-  // designed height was silently dropped (mergedMinima.length === 0) even
-  // though the geometry is perfectly valid.
-  for (const name of ['bistable6', 'bistable8', 'tower', 'monostable', 'compact']) {
-    const p = { ...PRESETS[name], chir: 1 };
-    const minima = findEnergyMinima(p);
-    assert.equal(minima.length, 1, `${name}: expected exactly 1 minimum, got ${minima.length}`);
+test('default bistable design: energy wells sit on the two strain-free shapes', () => {
+  for (const material of ['generic', 'polyimide']) {
+    const p = { dia: 3, height: 20, n: 6, floors: 10, angle: 100, stack: 1, chir: 1, material, thicknessUm: 50 };
+    const g = computeGeometry(p);
+    const path = foldEnergyPath(p, g);
+    const mins = pathMinima(path);
+    const step = path.H[1] - path.H[0];
+    assert.equal(mins.length, 2, `${material}: minima at ${mins}`);
+    assert.ok(Math.abs(mins[0] - g.fold.folded.H) < 3 * step, `${material}: folded well ${mins[0]} vs ${g.fold.folded.H}`);
+    assert.ok(Math.abs(mins[1] - g.fold.deployed.H) < 3 * step, `${material}: deployed well ${mins[1]} vs ${g.fold.deployed.H}`);
+    assert.equal(path.restH, g.fold.deployed.H);
+    assert.equal(path.foldH, g.fold.folded.H);
   }
 });
-test('local-minima detection is not fooled by an off-by-window edge case (tower-like near-h_max design point)', () => {
-  const p = { dia: 3, height: 8, n: 20, floors: 8, angle: 95, stack: 1, chir: 1 };
+test('single-stable design: one energy well, at the deployed shape', () => {
+  const p = { dia: 3, height: 20, n: 6, floors: 10, angle: 90, stack: 1, chir: 1, material: 'generic' };
   const g = computeGeometry(p);
-  assert.ok(g.valid, 'geometry should be valid');
-  const minima = findEnergyMinima(p);
-  assert.equal(minima.length, 1, `expected exactly 1 minimum, got ${minima.length}`);
+  assert.equal(g.rigidOk, true); assert.equal(g.bistable, false);
+  const path = foldEnergyPath(p, g);
+  // Squashed flat, the green crease comes back towards its printed length at
+  // the rejected second shape (through the tube axis), so the very bottom of
+  // the sweep can dip; only wells above that count.
+  const mins = pathMinima(path).filter(h => h > 0.1 * g.red_len);
+  assert.equal(mins.length, 1, `minima at ${mins}`);
+  assert.ok(Math.abs(mins[0] - g.fold.deployed.H) < 3 * (path.H[1] - path.H[0]));
+  assert.equal(path.foldH, null);
+});
+test('snap force (polyimide) is in a sane range and grows with sheet thickness', () => {
+  const base = { dia: 3, height: 20, n: 6, floors: 10, angle: 100, stack: 1, chir: 1, material: 'polyimide' };
+  const f = [25, 50, 100].map(t => { const p = { ...base, thicknessUm: t }; return snapForce(p, computeGeometry(p)); });
+  assert.ok(f[0] < f[1] && f[1] < f[2], `${f}`);
+  assert.ok(f[1] > 1e-3 && f[1] < 50, `50 um snap force ${f[1]} N`);
 });
 
 console.log('\nmodal.js — Kidambi & Wang (2020) 6-DOF sweep, checked against their Fig. 7/13 examples (n=8, R0=0.917)');
@@ -373,15 +390,15 @@ console.log('\nbuckling.js — snap-through vs. Euler/shell buckling');
     assert.ok(cantilever < pinned, 'cantilever (Le=2L) should buckle at a lower load than pinned-pinned (Le=L)');
   });
 
-  test('buckling margin decreases as sheet thickness increases (crease stiffness grows faster than shell strength)', () => {
-    const base = { ...PRESETS.bistable6, chir: 1, material: 'polyimide' };
+  test('buckling margin grows with sheet thickness (snap force ~ t from panel stretch, shell buckling ~ t^2)', () => {
+    const base = { dia: 3, height: 20, n: 6, floors: 10, angle: 100, stack: 1, chir: 1, material: 'polyimide' };
     const margins = [15, 50, 110].map(t => {
       const p = { ...base, thicknessUm: t };
       const g = computeGeometry(p);
       return bucklingCheck(p, g, 1.5).margin;
     });
-    assert.ok(margins[0] > margins[1] && margins[1] > margins[2],
-      `expected strictly decreasing margins with thickness, got ${margins}`);
+    assert.ok(margins[0] < margins[1] && margins[1] < margins[2],
+      `expected strictly increasing margins with thickness, got ${margins}`);
   });
 
   test('shellLocalBuckling and eulerColumnBuckling scale with radius/height as expected', () => {
@@ -471,15 +488,16 @@ console.log('\nexplorer.js — Design Explorer grid search (axis generation + re
     assert.equal(total, 3 * 3, `expected steps clamped up to >=2 divisions each (3x3=9), got total=${total}`);
   });
 
-  test('reqBistable gates passers: bistable6-preset point passes, monostable-preset point does not', () => {
+  test('reqBistable gates passers: a bistable design passes, the monostable preset does not', () => {
     const domA = explorerDom({ ...BASE_FIXED,
       'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
-      'exp-ymin': 105, 'exp-ymax': 105, 'exp-ysteps': 3,
+      'exp-ymin': 100, 'exp-ymax': 100, 'exp-ysteps': 3,
+      'exp-dia': 3, 'exp-height': 20, 'exp-floors': 10, 'exp-stack': 1,
       'exp-req-bistable': true,
-    }); // matches PRESETS.bistable6 exactly (known bistable, see geometry.js tests above)
+    }); // the app's default design: folds rigidly into two stable shapes (see geometry.js tests above)
     runExplorer();
     const a = gridTotals(domA.text('exp-status'));
-    assert.equal(a.passers, a.total, `expected every cell to pass (known-bistable preset), got ${a.passers}/${a.total}`);
+    assert.equal(a.passers, a.total, `expected every cell to pass (known-bistable design), got ${a.passers}/${a.total}`);
 
     const domB = explorerDom({ ...BASE_FIXED,
       'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
@@ -521,30 +539,23 @@ console.log('\nexplorer.js — Design Explorer grid search (axis generation + re
   });
 
   test('reqBuckling gates out a design whose margin falls below the safety factor', () => {
-    // Margins verified directly against buckling.js's bucklingCheck(): the
-    // PRESETS.tower shape at 50um margins ~186x, at 1200um margins ~1.13x
-    // (< the 1.5x safety factor requested here).
-    const safe = explorerDom({ ...BASE_FIXED,
-      'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
-      'exp-ymin': 95, 'exp-ymax': 95, 'exp-ysteps': 2,
-      'exp-dia': 2.5, 'exp-height': 30, 'exp-floors': 16, 'exp-stack': 2, 'exp-thick': 50,
-      'n-ext': 1.5, 'n-seaml': 1.31, 'n-seamr': 1.31, 'n-extcols': 1, 'n-scale': 80,
-      'exp-req-buckling': true, 'exp-safety': 1.5,
-    });
-    runExplorer();
-    const sSafe = gridTotals(safe.text('exp-status'));
-    assert.equal(sSafe.passers, sSafe.total, `expected the thin (50um) tower shape to pass, got ${sSafe.passers}/${sSafe.total}`);
-
-    const unsafe = explorerDom({ ...BASE_FIXED,
-      'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
-      'exp-ymin': 95, 'exp-ymax': 95, 'exp-ysteps': 2,
-      'exp-dia': 2.5, 'exp-height': 30, 'exp-floors': 16, 'exp-stack': 2, 'exp-thick': 1200,
-      'n-ext': 1.5, 'n-seaml': 1.31, 'n-seamr': 1.31, 'n-extcols': 1, 'n-scale': 80,
-      'exp-req-buckling': true, 'exp-safety': 1.5,
-    });
-    runExplorer();
-    const sUnsafe = gridTotals(unsafe.text('exp-status'));
-    assert.equal(sUnsafe.passers, 0, `expected the thick (1200um) tower shape to fail, got ${sUnsafe.passers}/${sUnsafe.total}`);
+    // The default bistable design at 50um has a buckling margin of ~3.4x
+    // (bucklingCheck: snap ~7.2 N vs local shell buckling ~24 N), so it
+    // passes a 1.5x safety factor and fails a 5x one.
+    const run = (safety) => {
+      const dom = explorerDom({ ...BASE_FIXED,
+        'exp-xaxis': 'n', 'exp-yaxis': 'angle', 'exp-xmin': 6, 'exp-xmax': 6,
+        'exp-ymin': 100, 'exp-ymax': 100, 'exp-ysteps': 2,
+        'exp-dia': 3, 'exp-height': 20, 'exp-floors': 10, 'exp-stack': 1, 'exp-thick': 50,
+        'exp-req-buckling': true, 'exp-safety': safety,
+      });
+      runExplorer();
+      return gridTotals(dom.text('exp-status'));
+    };
+    const ok = run(1.5);
+    assert.equal(ok.passers, ok.total, `expected a 1.5x safety factor to pass, got ${ok.passers}/${ok.total}`);
+    const strict = run(5);
+    assert.equal(strict.passers, 0, `expected a 5x safety factor to fail, got ${strict.passers}/${strict.total}`);
   });
 
   test('same axis chosen for X and Y aborts the run instead of computing a degenerate grid', () => {

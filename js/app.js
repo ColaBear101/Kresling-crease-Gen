@@ -1,6 +1,6 @@
 import { paramPairs, APP_VERSION } from './constants.js';
 import { getP, showToast, debounce, toggleSourcesModal } from './ui.js';
-import { computeGeometry, patternBounds } from './physics/geometry.js';
+import { computeGeometry, patternBounds, findBistableAngle, findMonostableAngle } from './physics/geometry.js';
 import { drawFlat, initFlatCanvasEvents } from './render/render-flat.js';
 import { init3d, draw3d } from './render/render-3d.js';
 import { initMold3d, drawMold3d } from './render/render-mold.js';
@@ -253,69 +253,40 @@ function autoFitA4() {
   draw();
 }
 
-// Adjusts Angle BR to the middle of the Cai et al. (2015) bistability window
-// (1 < red_len/side < 1/sin(pi/n), see geometry.js). Angle is the only slider
-// swept — dia/n/floors/height are held fixed, since they set the side length
-// `b` that the window is defined relative to. A dense grid search (rather
-// than the closed-form inverse) keeps this robust even where the relationship
-// isn't monotonic or a real solution barely exists within the slider bounds.
+// Moves Angle BR to the middle of the range where the drawn pattern folds
+// rigidly into two stable shapes (exact solution, geometry.js
+// findBistableAngle). Only the angle changes: dia/n/floors/height stay fixed.
+// This used to aim for the middle of the Cai et al. (2015) ratio window,
+// which for this zig-zag pattern often lands on a single-stable angle.
 function snapToBistable() {
   const p = getP();
   const rEl = document.getElementById('r-angle'), nEl = document.getElementById('n-angle');
-  const angMin = parseFloat(rEl.min), angMax = parseFloat(rEl.max);
-  const STEPS = 1600;
-  let best = null, bestScore = Infinity, bestG = null;
-  for (let i = 0; i <= STEPS; i++) {
-    const angle = angMin + (angMax - angMin) * i / STEPS;
-    const g = computeGeometry({ ...p, angle });
-    if (!g.valid) continue;
-    const target = (1 + g.bistableMax) / 2;
-    const inWindow = g.bLengthRatio > 1 && g.bLengthRatio < g.bistableMax;
-    const score = inWindow
-      ? Math.abs(g.bLengthRatio - target)
-      : 1000 + Math.min(Math.abs(g.bLengthRatio - 1), Math.abs(g.bLengthRatio - g.bistableMax));
-    if (score < bestScore) { bestScore = score; best = angle; bestG = g; }
+  const found = findBistableAngle(p, parseFloat(rEl.min), parseFloat(rEl.max));
+  if (!found) {
+    showToast('No angle in range gives two stable shapes for this diameter, height and floor count \u2014 try more floors or a smaller height', 3600);
+    return;
   }
-  if (best === null) { showToast('No valid geometry found in the angle range', 2200); return; }
-  rEl.value = best.toFixed(1); nEl.value = best.toFixed(1);
+  rEl.value = found.angle.toFixed(1); nEl.value = found.angle.toFixed(1);
   applyAutoSeam(); draw(); drawEnergyDebounced(); drawModalDebounced(); captureState();
-  const verdict = bestG.bistable ? 'bistable' : 'closest available (still not bistable — try widening dia/n/floors)';
-  showToast(`Angle \u2192 ${best.toFixed(1)}\u00b0 \u2014 b/a=${bestG.bLengthRatio.toFixed(3)}, ${verdict}`, 3200);
+  const fd = found.g.fold;
+  showToast(`Angle \u2192 ${found.angle.toFixed(1)}\u00b0 \u2014 bistable from ${found.window.lo.toFixed(1)}\u00b0 to ${found.window.hi.toFixed(1)}\u00b0; floor ${fd.deployed.H.toFixed(2)} \u2192 ${fd.folded.H.toFixed(2)} cm`, 3600);
 }
 
-// Adjusts Angle BR to a monostable point: outside the Cai et al. (2015)
-// window (ratio <= 1 or >= 1/sin(pi/n)), preferring whichever valid point is
-// closest to angle=90 (dx=0, the natural zero-twist / least-contorted
-// configuration) with at least a small safety margin from the boundary, so
-// it doesn't land right on the edge of turning bistable.
+// Moves Angle BR to a single-stable angle: the one closest to 90 deg (red
+// crease vertical, least twisted) that stays at least 2 deg away from any
+// bistable angle (geometry.js findMonostableAngle).
 function snapToMonostable() {
   const p = getP();
   const rEl = document.getElementById('r-angle'), nEl = document.getElementById('n-angle');
-  const angMin = parseFloat(rEl.min), angMax = parseFloat(rEl.max);
-  const STEPS = 1600;
-  const candidates = [];
-  for (let i = 0; i <= STEPS; i++) {
-    const angle = angMin + (angMax - angMin) * i / STEPS;
-    const g = computeGeometry({ ...p, angle });
-    if (!g.valid) continue;
-    const below = g.bLengthRatio <= 1, above = g.bLengthRatio >= g.bistableMax;
-    if (!below && !above) continue; // inside the bistable window
-    const margin = below ? (1 - g.bLengthRatio) : (g.bLengthRatio - g.bistableMax);
-    candidates.push({ angle, g, margin });
-  }
-  if (!candidates.length) {
-    showToast('No monostable angle found in range \u2014 try changing dia/n/floors/height', 3000);
+  const found = findMonostableAngle(p, parseFloat(rEl.min), parseFloat(rEl.max));
+  if (!found) {
+    showToast('No single-stable angle found in range \u2014 try changing dia/n/floors/height', 3000);
     return;
   }
-  const SAFE_MARGIN = 0.05;
-  const safe = candidates.filter(c => c.margin >= SAFE_MARGIN);
-  const pool = safe.length ? safe : candidates;
-  let best = pool[0];
-  for (const c of pool) if (Math.abs(c.angle - 90) < Math.abs(best.angle - 90)) best = c;
-  rEl.value = best.angle.toFixed(1); nEl.value = best.angle.toFixed(1);
+  rEl.value = found.angle.toFixed(1); nEl.value = found.angle.toFixed(1);
   applyAutoSeam(); draw(); drawEnergyDebounced(); drawModalDebounced(); captureState();
-  const note = safe.length ? '' : ' (marginal \u2014 close to the bistable boundary)';
-  showToast(`Angle \u2192 ${best.angle.toFixed(1)}\u00b0 \u2014 b/a=${best.g.bLengthRatio.toFixed(3)}, monostable${note}`, 3200);
+  const note = found.marginal ? ' (marginal \u2014 close to a bistable angle)' : '';
+  showToast(`Angle \u2192 ${found.angle.toFixed(1)}\u00b0 \u2014 single stable shape${note}`, 3200);
 }
 
 function resetDefaults() {

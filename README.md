@@ -70,7 +70,8 @@ The JS is split by concern rather than kept as one file: each module owns one pi
 Crease geometry and the physics models follow formulas from:
 
 - **Alipour & Arghavani (2023)**  exact 3D crease lengths, polygon side length, and the designed-state scan used by `physics/geometry.js`
-- **Cai et al. (2015)**  closed-form bistability criterion, `1 < red_len/side < 1/sin(π/n)`
+- **Guest & Pellegrino (1994)**  exact rigid folding: each floor of the drawn pattern folds into exactly two strain-free shapes or none. `physics/geometry.js` (`exactFold`) solves sin(ψ ± π/n) = (2ρ ± b)/(2R) for the pattern as drawn and uses it for the Bistable flag, the Extend/Fold lengths, the folded inner and true diameters, the 3D view and the ⚡ Bistable / ⚖ Monostable buttons. None of this changes the crease pattern.
+- **Cai et al. (2015)**  length-ratio criterion `1 < red_len/side < 1/sin(π/n)`, still shown in the Bistable tooltip for reference; it disagrees with the exact solution for this zig-zag pattern, so it no longer decides bistability
 - **Masana & Daqaq (2019)**  physical framing (strain energy vs. deployment height, multiple equilibria) motivating `physics/energy.js`'s energy-vs-height graph
 - **Schenk & Guest (2011)** and **Filipov, Tachi & Paulino, *PNAS* (2015)**  bar-and-hinge crease convention and the thin-plate torsional-hinge stiffness formula, `k_fold = E·t³·L / (12·(1−ν²)·w)`
 - **Kidambi & Wang (2020, *Physical Review E*)**  6-DOF truss model, mass/stiffness matrices, and the axial/off-axis modal-frequency analysis behind `physics/modal.js`, checked against their published Fig. 7/13 numbers

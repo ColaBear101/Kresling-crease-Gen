@@ -1,46 +1,7 @@
 import { getP } from '../ui.js';
-import { computeGeometry } from './geometry.js';
+import { computeGeometry, shapeAt, foldProgress } from './geometry.js';
+import { foldEnergyPath, snapRange } from './foldpath.js';
 import { ui } from '../state.js';
-import { springConstants } from './material.js';
-
-// Dihedral (fold) angles at the mountain crease AC (psi_m) and valley crease
-// BC (psi_v) of one Kresling unit cell, at floor height h. A, B are two
-// adjacent bottom-polygon vertices (z=0); C, D are the corresponding
-// top-polygon vertices (z=h), twisted by phi = dxH/R (arc-length small-angle
-// approximation, not modal.js's exact chord angle — see MODEL_NOTES).
-// Exported (pure function of h, L_r0, R, n) so it can be verified directly
-// against an independent dihedral-angle formula in test/regression.mjs,
-// rather than only indirectly through the canvas draw.
-export function getDihedral(h, L_r0, R, n) {
-  if (h <= 0 || h >= L_r0) return null;
-  const dxH   = Math.sqrt(Math.max(0, L_r0*L_r0 - h*h));
-  const phi   = dxH / R;
-  const alpha = Math.PI / n;
-  const vsub  = ([ax,ay,az],[bx,by,bz]) => [ax-bx,ay-by,az-bz];
-  const vcross= ([ax,ay,az],[bx,by,bz]) => [ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
-  const vdot  = ([ax,ay,az],[bx,by,bz]) => ax*bx+ay*by+az*bz;
-  const vnorm = v => { const l=Math.hypot(...v)||1; return v.map(x=>x/l); };
-  const A=[R,0,0];
-  const B=[R*Math.cos(2*alpha), R*Math.sin(2*alpha), 0];
-  const C=[R*Math.cos(phi)*Math.cos(alpha)-R*Math.sin(phi)*Math.sin(alpha),
-           R*Math.cos(phi)*Math.sin(alpha)+R*Math.sin(phi)*Math.cos(alpha), h];
-  const D=[R*Math.cos(phi+2*alpha), R*Math.sin(phi+2*alpha), h];
-  const n1=vnorm(vcross(vsub(B,A),vsub(C,A)));
-  const n2=vnorm(vcross(vsub(C,A),vsub(D,A)));
-  // Valley crease BC is shared by faces ABC and BCD (mirrors how n1/n2
-  // share mountain crease AC between faces ABC and ACD, pivoting on the
-  // other shared-edge endpoint B instead of A). The previous n3 only ever
-  // referenced A, B, C — never D — so it was just ±n1 (the same face
-  // renormalized), making psi_v a constant pi regardless of h. Verified
-  // against an independent torsion-angle formula on the 4-point chain.
-  const n3=vnorm(vcross(vsub(A,B),vsub(C,B)));
-  const n4=vnorm(vcross(vsub(C,B),vsub(D,B)));
-  return {
-    psi_m: Math.acos(Math.max(-1,Math.min(1,vdot(n1,n2)))),
-    psi_v: Math.acos(Math.max(-1,Math.min(1,vdot(n3,n4)))),
-    dxH,
-  };
-}
 
 export function drawEnergy() {
   const canvas = document.getElementById('canvasEnergy');
@@ -54,34 +15,30 @@ export function drawEnergy() {
 
   const p = getP(), g = computeGeometry(p);
   const { n, floors, stack } = p;
-  const { floor_h, R, b, dx } = g;
   const totalFloors = floors * stack;
 
-  const L_r0  = g.red_len;
-  const h_max = L_r0 * 0.999;
-  const h_min = L_r0 * 0.02;
-  const STEPS = 400;
-
-  const rest = getDihedral(floor_h, L_r0, R, n);
-  if (!rest) {
+  // Energy along the exact fold path (foldpath.js): the same geometry as the
+  // 3-D view and the Bistable flag, so the wells sit on the strain-free shapes.
+  const path = foldEnergyPath(p, g);
+  if (!path) {
     ctx.fillStyle='#f87171'; ctx.font='12px monospace';
     ctx.fillText('Cannot compute energy: invalid geometry', 20, H/2); return;
   }
-  const { psi_m: psi_m0, psi_v: psi_v0 } = rest;
-  const { k_m, k_v } = springConstants(p, g);
-
-  const energyPoints = [], heightPoints = [];
+  const STEPS = path.H.length - 1;
+  const heightPoints = path.H.map(h => h * totalFloors);
+  const energyPoints = path.E.slice();
+  const h_min = path.H[0], h_max = path.H[STEPS];
   let minE = Infinity, maxE = -Infinity;
-
-  for (let i = 0; i <= STEPS; i++) {
-    const h      = h_min + (i/STEPS) * (h_max - h_min);
-    const angles = getDihedral(h, L_r0, R, n);
-    if (!angles) { energyPoints.push(0); heightPoints.push(h * totalFloors); continue; }
-    const { psi_m, psi_v } = angles;
-    const E = (k_m*(psi_m-psi_m0)**2 + k_v*(psi_v-psi_v0)**2) * n * totalFloors;
-    energyPoints.push(E); heightPoints.push(h * totalFloors);
-    if (E < minE) minE = E; if (E > maxE) maxE = E;
-  }
+  for (const E of energyPoints) { if (E < minE) minE = E; if (E > maxE) maxE = E; }
+  // Close to the geometric limits the panel stretch climbs so steeply that
+  // it would flatten the wells and the snap barrier into the floor. Scale
+  // the axis to the snap range (foldpath.js snapRange) instead and let the
+  // curve clip off the top, as the force axis below already does.
+  const snap = snapRange(g);
+  let snapMaxE = 0;
+  path.H.forEach((h, i) => { if (h >= snap.lo - 1e-9 && h <= snap.hi + 1e-9) snapMaxE = Math.max(snapMaxE, energyPoints[i]); });
+  const energyClipped = snapMaxE > minE && maxE > minE + 2.5 * (snapMaxE - minE);
+  if (energyClipped) maxE = minE + 2.5 * (snapMaxE - minE);
 
   // Quasi-static force needed to hold/drive the tube at height h: by the
   // principle of virtual work, F(h) = dE/dh along the deployment path. Only
@@ -100,17 +57,14 @@ export function drawEnergy() {
       forcePoints.push(F);
       if (F < minF) minF = F; if (F > maxF) maxF = F;
     }
-    // Robust axis scaling: dE/dh genuinely diverges as h approaches the
-    // crease-inextensibility limits (h -> h_min or h -> h_max) — that's a
-    // real feature of the model (the underlying energy has a steep but
-    // visually tiny uptick there, invisible on the 0..maxE scale), not a
-    // bug. But it's not representative of any realistic operating range,
-    // and letting it set the axis scale crushes the physically meaningful
-    // region near the stable state into an unreadable sliver. Base the
-    // visible range on the 92nd percentile of |F| instead, and let the
-    // curve clip off the top/bottom near the edges.
+    // Axis scaling: dE/dh climbs steeply towards the geometric limits (real
+    // in the model, but nowhere anyone pushes the tube), which would crush
+    // the snap itself into a sliver. Scale to the largest |F| over the snap
+    // range (the same range the buckling check uses) and let the curve clip.
+    let snapSpan = 0;
+    path.H.forEach((h, i) => { if (h >= snap.lo - 1e-9 && h <= snap.hi + 1e-9) snapSpan = Math.max(snapSpan, Math.abs(forcePoints[i])); });
     const sortedAbsF = forcePoints.map(Math.abs).slice().sort((a,b)=>a-b);
-    const robustSpan = Math.max(sortedAbsF[Math.floor(sortedAbsF.length*0.92)], 1e-6);
+    const robustSpan = Math.max(snapSpan || sortedAbsF[Math.floor(sortedAbsF.length*0.92)], 1e-6);
     minF = -robustSpan * 1.15; maxF = robustSpan * 1.15;
   }
 
@@ -140,13 +94,16 @@ export function drawEnergy() {
   if (energyPoints[STEPS] < energyPoints[STEPS-WINDOW]) endpointMinima.push({idx:STEPS, h:heightPoints[STEPS], E:energyPoints[STEPS], label:'Extended'});
   const allMinima   = [...endpointMinima, ...mergedMinima];
   const isBistable  = mergedMinima.length >= 1 && (endpointMinima.length >= 1 || mergedMinima.length >= 2) && g.bistable;
+  // Two strain-free shapes, but the crease hinges (rest = deployed shape) are
+  // stiff enough to tip the folded one out of its well.
+  const geomOnly    = g.bistable && !isBistable;
 
   // Layout
   const PAD = { l:52, r: showForce ? 46 : 16, t:40, b:48 };
   const gW = W-PAD.l-PAD.r, gH = H-PAD.t-PAD.b;
   const totalH_max = heightPoints[STEPS], totalH_min = heightPoints[0];
   function toX(h) { return PAD.l + (h-totalH_min)/(totalH_max-totalH_min+1e-9)*gW; }
-  function toY(E) { return PAD.t + gH - (E-minE)/(maxE-minE+1e-9)*gH; }
+  function toY(E) { return PAD.t + gH - (Math.min(E, maxE)-minE)/(maxE-minE+1e-9)*gH; }
   function toY2(F) { return PAD.t + gH - (F-minF)/(maxF-minF+1e-9)*gH; }
 
   // Grid (tick counts shrink on narrow/short panels so labels never crowd
@@ -202,7 +159,7 @@ export function drawEnergy() {
   }
 
   // Designed-state marker
-  const designedH = floor_h * totalFloors;
+  const designedH = (path.restH ?? shapeAt(g, 0).H) * totalFloors;
   ctx.beginPath();ctx.moveTo(toX(designedH),PAD.t);ctx.lineTo(toX(designedH),PAD.t+gH);
   ctx.strokeStyle='rgba(160,160,200,0.3)';ctx.lineWidth=1;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
 
@@ -211,7 +168,7 @@ export function drawEnergy() {
   // an energy minimum, so the current-state dot frequently lands right on
   // top of an equilibrium marker — their labels must not both claim the
   // normal "float near the dot" position or they render as illegible mush.
-  const curH    = (1-p.compress)*(designedH - h_min*totalFloors) + h_min*totalFloors;
+  const curH    = Math.max(heightPoints[0], Math.min(heightPoints[STEPS], shapeAt(g, foldProgress(p)).H * totalFloors));
   const curIdx  = Math.max(0,Math.min(STEPS,Math.round((curH-totalH_min)/(totalH_max-totalH_min)*STEPS)));
   const curE    = energyPoints[curIdx];
   const curF    = showForce ? forcePoints[curIdx] : null;
@@ -276,7 +233,9 @@ export function drawEnergy() {
   const matTag = p.material === 'polyimide' ? `· polyimide ${p.thicknessUm}µm` : '';
   const stabilityCandidates = isBistable
     ? ['BISTABLE — two energy wells', 'BISTABLE']
-    : ['monostable'];
+    : geomOnly
+      ? ['two shapes, but creases erase the folded well', 'folded well erased', 'monostable']
+      : ['monostable'];
   const row2RightCandidates = showForce
     ? ['- - - Force (N, right axis, clipped near limits)', '- - - Force (N, right axis)', '- - - Force (N)']
     : ['Set material=Polyimide for Force (N)', 'Set material=Polyimide'];
@@ -304,7 +263,7 @@ export function drawEnergy() {
   ctx.fillStyle='rgba(224,234,240,0.8)';ctx.font='10px "JetBrains Mono",monospace';ctx.textAlign='left';
   ctx.fillText(row1Title, PAD.l, PAD.t-18);
   ctx.font='9px "JetBrains Mono",monospace'; ctx.textAlign='right';
-  ctx.fillStyle = isBistable ? '#4ade80' : 'rgba(139,144,160,0.7)';
+  ctx.fillStyle = isBistable ? '#4ade80' : geomOnly ? '#fbbf24' : 'rgba(139,144,160,0.7)';
   ctx.fillText(row1Tag, PAD.l+gW, PAD.t-18);
 
   ctx.font='9px "JetBrains Mono",monospace';

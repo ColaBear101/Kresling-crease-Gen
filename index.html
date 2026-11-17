@@ -49,8 +49,8 @@
       <div class="ctrl"><label>Floors</label><div class="ctrl-right"><input type="range" id="r-floors" min="2" max="20" step="1" value="10"><input class="num-inp" id="n-floors" type="number" min="2" max="20" step="1" value="10"></div></div>
       <div class="ctrl"><label>Angle BR (°)</label><div class="ctrl-right"><input type="range" id="r-angle" min="60" max="140" step="0.5" value="100"><input class="num-inp" id="n-angle" type="number" min="60" max="140" step="0.5" value="100"></div></div>
       <div style="padding:2px 4px 6px;display:flex;gap:4px">
-        <button onclick="snapToBistable()" title="Adjusts Angle BR to the middle of the bistable window (1 < red_len/side < 1/sin(π/n)), per Cai et al. (2015)" style="flex:1;font-size:10px;padding:4px 4px;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--accent2);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">⚡ Bistable</button>
-        <button onclick="snapToMonostable()" title="Adjusts Angle BR to the least-twisted angle outside the bistable window (prefers the natural zero-twist point at 90°, per Cai et al. 2015)" style="flex:1;font-size:10px;padding:4px 4px;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--yellow);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">⚖ Monostable</button>
+        <button onclick="snapToBistable()" title="Moves Angle BR to the middle of the range where the drawn pattern folds rigidly into two stable shapes (exact two-state solution)" style="flex:1;font-size:10px;padding:4px 4px;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--accent2);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">⚡ Bistable</button>
+        <button onclick="snapToMonostable()" title="Moves Angle BR to the angle closest to 90° that has a single stable shape, at least 2° away from any bistable angle" style="flex:1;font-size:10px;padding:4px 4px;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--yellow);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">⚖ Monostable</button>
       </div>
       <div class="ctrl"><label>Stack count</label><div class="ctrl-right"><input type="range" id="r-stack" min="1" max="4" step="1" value="1"><input class="num-inp" id="n-stack" type="number" min="1" max="4" step="1" value="1"></div></div>
       <div class="ctrl ctrl-select" style="padding:3px 4px">
@@ -132,6 +132,7 @@
           <div class="stat"><div class="stat-l">Extend L</div><div class="stat-v" id="s-extlen">—</div></div>
           <div class="stat"><div class="stat-l">Fold L</div><div class="stat-v" id="s-foldlen">—</div></div>
           <div class="stat"><div class="stat-l">Fold ⌀i</div><div class="stat-v" id="s-foldid">—</div></div>
+          <div class="stat"><div class="stat-l">True ⌀</div><div class="stat-v" id="s-truedia">—</div></div>
           <div class="stat"><div class="stat-l">Mass</div><div class="stat-v" id="s-mass">—</div></div>
         </div>
         <div class="mv-legend">
@@ -176,7 +177,7 @@
               <div class="exp-range-row"><input class="num-inp" id="exp-ymin" type="number" title="min"><span>→</span><input class="num-inp" id="exp-ymax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-ysteps" type="number" title="steps" style="width:40px"></div>
 
               <div class="sec-label">Requirements</div>
-              <div class="ctrl-check"><input type="checkbox" id="exp-req-bistable" checked><label for="exp-req-bistable">Must be bistable (Cai et al. 2015)</label></div>
+              <div class="ctrl-check"><input type="checkbox" id="exp-req-bistable" checked><label for="exp-req-bistable">Must be bistable (two strain-free shapes)</label></div>
               <div class="ctrl-check"><input type="checkbox" id="exp-req-buckling" checked><label for="exp-req-buckling">Must not buckle before snapping</label></div>
               <div class="ctrl"><label>Safety factor</label><div class="ctrl-right"><input class="num-inp" id="exp-safety" type="number" step="0.1" value="1.5" style="width:100%"></div></div>
               <div class="ctrl ctrl-select"><label>End condition</label><select id="exp-endcond"><option value="pinned">Pinned-pinned</option><option value="fixed-free">Fixed-free (cantilever)</option></select></div>

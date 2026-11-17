@@ -2,7 +2,7 @@
 // in app.js:initApp so it can't drift out of sync with a hand-edited
 // index.html) and the printed pattern info box, so an exported/printed sheet
 // is traceable back to the app version that generated it.
-export const APP_VERSION = 'v24';
+export const APP_VERSION = 'v25';
 
 export const A4_W = 21.0;
 export const A4_H = 29.7;
@@ -65,7 +65,12 @@ export const SOURCES = [
   {
     cite: 'Cai, J., Deng, X., Zhou, Y., Feng, J., & Tu, Y. (2015). Bistable behavior of the cylindrical origami structure with Kresling pattern. Journal of Mechanical Design, 137(6), 061406.',
     url:  'https://doi.org/10.1115/1.4030158',
-    use:  'Closed-form bistability criterion 1 < red_len/side < 1/sin(π/n), replacing the previous ad-hoc h0/R heuristic in geometry.js',
+    use:  'Length-ratio criterion 1 < red_len/side < 1/sin(π/n). Shown for reference only: the Bistable flag now comes from the exact two-state folding solution (Guest & Pellegrino 1994), which disagrees with this ratio for the zig-zag pattern drawn here',
+  },
+  {
+    cite: 'Guest, S. D., & Pellegrino, S. (1994). The folding of triangulated cylinders, Part I: Geometric considerations. Journal of Applied Mechanics, 61(4), 773–777.',
+    url:  'https://portal.mardi4nfdi.de/wiki/Item:Q4842177',
+    use:  'Exact rigid folding: each floor has exactly two strain-free shapes (or none). Drives the Bistable flag, Extend/Fold length, folded inner and true diameter, the 3-D view and the snap buttons (geometry.js exactFold)',
   },
   {
     cite: 'Kidambi, N., & Wang, K. W. (2020). Dynamics of Kresling origami deployment. Physical Review E, 101(6), 063003.',

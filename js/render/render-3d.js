@@ -1,5 +1,5 @@
 import { getP } from '../ui.js';
-import { computeGeometry } from '../physics/geometry.js';
+import { computeGeometry, shapeAt, foldProgress, tubeRings } from '../physics/geometry.js';
 import { cam3d } from '../state.js';
 
 // Shared by the wheel handler and draw3d() so the zoom range always tracks
@@ -11,8 +11,8 @@ import { cam3d } from '../state.js';
 // fan of lines rather than a close-up).
 function fitDist3d(p, g) {
   const totalFloors = p.floors * p.stack;
-  const eFH = g.floor_h * (1 - p.compress * 0.98);
-  const scaleRef = Math.max(g.R * 2, totalFloors * eFH);
+  const shape = shapeAt(g, foldProgress(p));
+  const scaleRef = Math.max(shape.R * 2, totalFloors * shape.H);
   return { scaleRef, autoDist: scaleRef * 1.8 + 2 };
 }
 
@@ -64,24 +64,15 @@ export function draw3d() {
   ctx.fillStyle = '#13151e'; ctx.fillRect(0, 0, W, H);
 
   const p = getP(), g = computeGeometry(p);
-  const { n, floors, stack, chir, compress } = p;
-  const { floor_h, dx, R } = g;
+  const { n, floors, stack, chir } = p;
   const totalFloors = floors * stack;
-  const eFH = floor_h * (1 - compress * 0.98);
-  const eDx = dx      * (1 - compress * 0.5);
+  // Exact folded shape of the drawn pattern (see shapeAt in geometry.js): the
+  // creases have their printed lengths at both ends of the slider.
+  const shape = shapeAt(g, foldProgress(p));
+  const R = shape.R, eFH = shape.H;
 
-  // Build 3-D vertex rings
-  const rings = [];
-  for (let f = 0; f <= totalFloors; f++) {
-    const row = [];
-    const y3d = f * eFH - (totalFloors * eFH / 2);
-    const ang = (f % 2 === 1) ? (eDx / R) * chir : -(eDx / R) * chir;
-    for (let k = 0; k < n; k++) {
-      const a = (2 * Math.PI * k / n) + ang;
-      row.push([R * Math.cos(a), y3d, R * Math.sin(a)]);
-    }
-    rings.push(row);
-  }
+  // Vertex rings (shared with the STL export): floors alternate, so rings turn by ±psi/2.
+  const rings = tubeRings(n, totalFloors, shape);
 
   const cx = Math.cos(cam3d.rotX), sx = Math.sin(cam3d.rotX);
   const cy = Math.cos(cam3d.rotY), sy = Math.sin(cam3d.rotY);
@@ -171,8 +162,13 @@ export function draw3d() {
 
   ctx.fillStyle='rgba(139,144,160,0.7)'; ctx.font='10px "JetBrains Mono",monospace';
   ctx.textAlign='left';
-  const leftText = `n=${n}  f=${totalFloors}  ⌀${(R*2).toFixed(1)}cm  h=${(totalFloors*eFH).toFixed(1)}cm`;
+  const leftText = `n=${n}  f=${totalFloors}  ⌀${(R*2).toFixed(2)}cm  h=${(totalFloors*eFH).toFixed(1)}cm`;
   ctx.fillText(leftText, 8, H-10);
+  const stateText = shape.exact
+    ? (foldProgress(p) === 0 ? 'deployed (strain-free)' : 'folded (strain-free)')
+    : (shape.note || 'between the stable shapes: panels strained');
+  ctx.fillStyle = shape.note && shape.note.startsWith('no strain-free') ? 'rgba(248,113,113,0.85)' : 'rgba(139,144,160,0.7)';
+  ctx.fillText(stateText, 8, 16);
   const rightText = 'drag=rotate  scroll=zoom  dbl=reset';
   const leftW = ctx.measureText(leftText).width;
   ctx.textAlign='right';

@@ -1,6 +1,6 @@
 import { A4_W, A4_H } from './constants.js';
 import { getP, showToast, infoBoxSVGText, creaseLengthLabels, creaseLabelsSVGText } from './ui.js';
-import { computeGeometry, buildVerts } from './physics/geometry.js';
+import { computeGeometry, buildVerts, shapeAt, foldProgress, tubeRings } from './physics/geometry.js';
 import { renderPatternToCtx } from './render/render-flat.js';
 
 // ─── Shared SVG line-builder (used by exportSVG, and by exportPDF for both
@@ -179,30 +179,15 @@ export function exportDXF() {
 // ─── STL (hollow tube) ───────────────────────────────────────────────────────
 export function exportSTL() {
   const p = getP(), g = computeGeometry(p);
-  const { n, floors, stack, chir, compress } = p;
-  const { floor_h, dx, R } = g;
+  const { n, floors, stack, chir } = p;
   const totalFloors = floors * stack;
-  const eFH  = floor_h * (1 - compress * 0.98);
-  const eDx  = dx * (1 - compress * 0.5);
+  // Same exact shape as the 3-D view (geometry.js shapeAt) at the current
+  // compress-slider position, so the STL is what is on screen.
+  const shape = shapeAt(g, foldProgress(p));
+  const R = shape.R;
   const wallT = (p.wallmm || 0.8) / 10;
   const Ri    = Math.max(0.01, R - wallT);
-
-  function makeRings(radius) {
-    const rings = [];
-    for (let f = 0; f <= totalFloors; f++) {
-      const row = [];
-      const y3d = f * eFH - (totalFloors * eFH / 2);
-      const angOuter = (f % 2 === 1) ? (eDx/R)*chir : -(eDx/R)*chir;
-      for (let k = 0; k < n; k++) {
-        const a = (2*Math.PI*k/n) + angOuter;
-        row.push([radius*Math.cos(a), y3d, radius*Math.sin(a)]);
-      }
-      rings.push(row);
-    }
-    return rings;
-  }
-
-  const outerRings = makeRings(R), innerRings = makeRings(Ri);
+  const outerRings = tubeRings(n, totalFloors, shape, R), innerRings = tubeRings(n, totalFloors, shape, Ri);
   const cross=([ax,ay,az],[bx,by,bz])=>[ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx];
   const sub  =([ax,ay,az],[bx,by,bz])=>[ax-bx,ay-by,az-bz];
   const norm = v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};

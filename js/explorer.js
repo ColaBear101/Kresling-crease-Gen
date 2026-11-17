@@ -229,7 +229,9 @@ function tooltipHTML(x, y, cell, xKey, yKey) {
   const xl = AXIS_DEFS[xKey].label, yl = AXIS_DEFS[yKey].label;
   let lines = [`${xl}=${AXIS_DEFS[xKey].integer ? Math.round(x) : x.toFixed(2)}  ${yl}=${AXIS_DEFS[yKey].integer ? Math.round(y) : y.toFixed(2)}`];
   if (!cell.valid) { lines.push('invalid geometry (dx \u2265 side length)'); return lines.join('<br>'); }
-  lines.push(`bistable: ${cell.g.bistable ? 'yes' : 'no'} (b/a=${cell.g.bLengthRatio.toFixed(3)})`);
+  lines.push(cell.g.bistable
+    ? `bistable: yes (floor ${cell.g.fold.deployed.H.toFixed(2)} \u2192 ${cell.g.fold.folded.H.toFixed(2)} cm)`
+    : `bistable: no (${cell.g.rigidOk ? 'single stable state' : 'no strain-free fold'})`);
   lines.push(`A4 fit: ${cell.fitsA4 ? 'yes' : 'no'}`);
   if (cell.bc && cell.bc.available) {
     lines.push(`buckling margin: ${cell.bc.margin.toFixed(2)}\u00d7 (limits: ${cell.bc.limitingMode})`);
@@ -247,7 +249,7 @@ function renderExplorerCandidates(passers, xKey, yKey) {
     const marginTxt = cell.bc && cell.bc.available ? `margin ${cell.bc.margin.toFixed(2)}\u00d7` : '';
     return `<div class="exp-cand" data-x="${x}" data-y="${y}">
       <span class="exp-cand-main">${AXIS_DEFS[xKey].label.split(' ')[0]}=${AXIS_DEFS[xKey].integer ? Math.round(x) : x.toFixed(2)}, ${AXIS_DEFS[yKey].label.split(' ')[0]}=${AXIS_DEFS[yKey].integer ? Math.round(y) : y.toFixed(2)}</span>
-      <span class="exp-cand-sub">b/a=${cell.g.bLengthRatio.toFixed(2)} \u00b7 ${marginTxt}</span>
+      <span class="exp-cand-sub">${cell.g.bistable ? `floor ${cell.g.fold.deployed.H.toFixed(2)}\u2192${cell.g.fold.folded.H.toFixed(2)} cm` : (cell.g.rigidOk ? 'single stable' : 'no rigid fold')} \u00b7 ${marginTxt}</span>
     </div>`;
   }).join('');
   el.querySelectorAll('.exp-cand').forEach(row => {

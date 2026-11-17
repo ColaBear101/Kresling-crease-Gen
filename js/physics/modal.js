@@ -192,10 +192,29 @@ function modesAt(x0, fn, M) {
 // ─── Full δ0 sweep for the current n, R0 (memoised) ─────────────────────────
 let _lastKey = '', _lastSweep = null;
 
+/**
+ * Kidambi & Wang's stress-free module for the current design: R0 (ring radius
+ * over height) and δ0 (turn of the less-turned crease; the other turns
+ * 2π/n further the same way). Taken from the exact deployed shape when the
+ * pattern has one (geometry.js exactFold). When its two creases lean opposite
+ * ways round the tube the shape is outside their family, so δ0 is null.
+ * Falls back to the flat-pattern estimate for a geometry object without a
+ * fold solution (as the tests pass in).
+ */
+export function modalStressFree(g) {
+  if (g.fold && g.rigidOk) {
+    const d = g.fold.deployed;
+    const R0 = g.fold.R3 / d.H;
+    if (Math.sign(d.psi) !== Math.sign(d.spanGreen)) return { R0, delta0: null };
+    return { R0, delta0: Math.min(Math.abs(d.psi), Math.abs(d.spanGreen)) };
+  }
+  return { R0: g.R / g.floor_h, delta0: 2 * Math.abs(g.dx) / g.R };
+}
+
 export function computeModalSweep(p, g) {
   const n = p.n;
-  const R0 = g.R / g.floor_h;
-  const delta0Cur = 2 * Math.abs(g.dx) / g.R;
+  const { R0, delta0: delta0Exact } = modalStressFree(g);
+  const delta0Cur = delta0Exact === null ? NaN : delta0Exact;
   const key = `${n},${R0.toFixed(6)}`;
   if (key === _lastKey) return { ..._lastSweep, degCur: delta0Cur*180/Math.PI };
   _lastKey = key;
@@ -248,7 +267,7 @@ export function drawModal() {
   // changed (computeModalSweep memoises on that key) — but on a cache miss,
   // painting nothing until it finishes makes the panel look frozen. Show a
   // placeholder immediately and defer the real work to the next tick.
-  const sweepKey = `${p.n},${(g.R / g.floor_h).toFixed(6)}`;
+  const sweepKey = `${p.n},${modalStressFree(g).R0.toFixed(6)}`;
   if (sweepKey !== _lastKey) {
     ctx.fillStyle = 'rgba(200,210,255,0.55)'; ctx.font = '11px "JetBrains Mono",monospace'; ctx.textAlign = 'center';
     ctx.fillText('Computing modal frequencies\u2026', W/2, H/2 - 6);
@@ -310,6 +329,9 @@ export function drawModal() {
     ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle='rgba(255,255,255,0.6)';
     ctx.fillText('current \u03b4\u2080='+degCur.toFixed(1)+'\u00b0', PAD.l+gW, PAD.t-31);
+  } else if (!Number.isFinite(degCur)) {
+    ctx.fillStyle='rgba(250,204,21,0.65)';
+    ctx.fillText(g.rigidOk ? 'current design: creases lean opposite ways, outside this model' : 'current design: no strain-free shape', PAD.l+gW, PAD.t-31);
   } else {
     ctx.fillStyle='rgba(250,204,21,0.65)';
     ctx.fillText(`current \u03b4\u2080=${degCur.toFixed(1)}\u00b0 (outside ${DEG_MIN}-${DEG_MAX}\u00b0 sweep)`, PAD.l+gW, PAD.t-31);
