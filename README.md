@@ -57,7 +57,9 @@ ridge width is limited to 0.9 × the gap between neighbouring creases.
 
 **Presets from Kresling Crease Generator.** Open reads the preset files the earlier app exports and
 converts them (cm to mm, arc side to chord, entered angle to drawn angle) so that every
-crease lands where that app prints it. Presets that have no rigid fold open too, but this
+crease lands where that app prints it. Mountain and valley follow the folded shape, as
+everywhere in this app, so some fold directions differ from that app's red and green lines;
+the note shown on opening names them. Presets that have no rigid fold open too, but this
 app draws no pattern for them and says why.
 
 **Mechanics** (`js/physics/`). Each panel is a constant-strain triangle (plane-stress

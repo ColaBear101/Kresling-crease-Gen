@@ -28,7 +28,7 @@ const REQS = [
 ];
 
 function axisDefault(axis, value) {
-  const span = axis.max - axis.min;
+  const span = axis.span || axis.max - axis.min;
   let lo = value - span * 0.15, hi = value + span * 0.15;
   if (axis.key === 'n') { lo = Math.max(3, value - 3); hi = Math.min(axis.max, value + 4); }
   if (axis.key === 'floors') { lo = Math.max(1, value - 3); hi = Math.min(axis.max, value + 4); }

@@ -32,9 +32,16 @@ const AXIS_KEYS = [
   ['restPct', ['heights', 'flat']],
 ];
 
+// Width the explorer's default window is based on (15 % of it either side of the
+// current value), where it differs from the control's range: the strip height and
+// crease angle ranges were widened to open every Kresling-crease-Gen preset, and
+// a wider default window would only make the default grid coarser.
+const DEFAULT_SPAN = { hFlat: 148, angle: 115 };
+
 export const EXPLORE_AXES = AXIS_KEYS.map(([key, modes]) => {
   const s = schemaFor(key);
-  return { key, label: s.label, unit: s.unit || '', min: s.min, max: s.max, step: s.step, integer: s.step >= 1, modes };
+  return { key, label: s.label, unit: s.unit || '', min: s.min, max: s.max, step: s.step, integer: s.step >= 1, modes,
+    span: DEFAULT_SPAN[key] || s.max - s.min };
 });
 
 export function evaluateDesign(params, req = {}) {

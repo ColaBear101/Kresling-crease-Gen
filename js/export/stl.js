@@ -9,7 +9,7 @@
 //                          bbox: { min: [x,y,z], max: [x,y,z], size: [x,y,z] } | null,
 //                          vertices (after welding), openEdges, degenerate }
 //   tubeMesh(design, opts) -> { positions: Float64Array, triangles: Uint32Array, header,
-//                               wall, wallRequested, clamped, clearRadius,
+//                               wall, wallRequested, clamped, clearRadius, splitVertices,
 //                               thickness: { min, max } }   (mm, wall measured normal to each face)
 //   moldMesh(layout, which) -> { positions, triangles, header, ridges, borders,
 //                                shells: [{ start, count, role: 'slab' | 'ridge' | 'border' }] }
@@ -19,17 +19,20 @@
 // with the end rings of the sheet standing on the two end polygons (prisms of
 // the bottom ring's height below ring 0 and the top ring's above ring N), triangles counter-clockwise
 // seen from outside. The inner surface has the same
-// topology; each vertex moves inward to the point that puts every incident face
+// topology (apart from split folds, below); each vertex moves inward to the point that puts every incident face
 // plane `wall` behind the outer one as closely as possible (weighted least
 // squares, see wallOffset). Kresling ring vertices join six faces folded up to
 // ~110 deg, so no single offset fits them all: the plain rule "along the vertex
 // normal by wall / max(0.5, cos theta)" gave 1.0-1.7 x wall on the default tube
 // and 0.3-0.6 x wall on the 12-gon disc; the fit keeps the body of every preset
-// at about 0.9-1.5 x wall when deployed. Where an end ring meets the first or
-// last floor the fit spreads further: about 0.6-2.6 x wall on the 12-gon disc
-// with 20 mm rings, down to 0.45 x with 60 mm rings (tall ring panels outweigh
-// its nearly flat floors; weighting by corner angle instead turned that wall
-// inside out, so the fit stays area-weighted).
+// at about 0.9-1.5 x wall when deployed. Where one shared inner vertex still
+// leaves a face thinner than SPLIT_BELOW x wall and the vertex joins two floors (a
+// polygon fold, or where an end ring meets the body), each floor gets its own
+// inner vertex and a band of triangles joins the two along the fold. That was
+// needed where an end ring meets the 12-gon disc (0.45 x wall with 60 mm rings)
+// and with same-hand floors (0.03-0.6 x wall: the floor above a ring is a
+// half-turn copy of the floor below, which forces one shared offset straight
+// inward); with it every preset keeps 0.8 x wall or more in both stackings.
 // Offsets are capped at MITER_MAX x wall, half the shortest edge at the vertex
 // and 0.9 x the clear radius; the upright edge of an end ring (as short as the
 // ring is tall) only limits the vertical part, to half its length. At the two open rings
@@ -61,6 +64,7 @@ import { APP_NAME } from '../core/params.js';
 export const MOLD_SINK = 0.05;        // mm a ridge prism reaches down into the slab
 export const WALL_CLEAR_MAX = 0.45;   // largest wall as a fraction of the clear radius
 export const MITER_MAX = 6;           // largest inner-vertex offset, in walls (sharp creases)
+export const SPLIT_BELOW = 0.75;      // thinner than this x wall: each floor at the fold gets its own inner vertex
 const EDGE_FRACTION = 0.5;            // ... and at most this fraction of the shortest edge there
 const LSQ_REG = 1e-3;                 // weak pull toward the vertex normal (keeps the solve well posed)
 const LSQ_UNDER = 4;                  // extra weight on faces whose wall came out too thin
@@ -137,9 +141,19 @@ export function tubeMesh(design, opts = {}) {
   const wall = Math.min(requested, Math.max(MIN_WALL, WALL_CLEAR_MAX * clear));
   const clamped = wall < requested;
 
-  // inner vertices
+  // inner vertices: one per outer vertex (v + nv), placed by wallOffset. Where that
+  // shared inner vertex leaves the wall thinner than SPLIT_BELOW x wall and the vertex
+  // joins exactly two floors (a polygon fold, or where an end ring meets the body),
+  // each floor gets its own inner vertex and a band of triangles joins the two along
+  // the fold (below). Same-hand floors need this: the floor above a ring is a
+  // half-turn copy of the floor below, which forces one shared offset to point
+  // straight inward, so nearly flat panels kept almost no wall.
   const tiny = 1e-12 * Math.max(1, design.R * design.R);
-  let thickMin = Infinity, thickMax = 0;
+  const faceFloor = Int32Array.from(tube.faces, (fc) => fc.floor);
+  const upper = new Int32Array(nv).fill(-1);     // inner vertex of the upper floor at a split vertex
+  const upperFloor = new Int32Array(nv);
+  const extra = [];                              // xyz of those extra inner vertices
+  let thickMin = Infinity, thickMax = 0, splits = 0;
   const near = [];                               // incident faces of the current vertex
   for (let k = 0; k < rings.length; k++) {
     const end = openRing(k);
@@ -159,33 +173,58 @@ export function tubeMesh(design, opts = {}) {
           if (u % n === i && (Math.floor(u / n) > N) !== (k > N)) upright = Math.min(upright, d);
           else edgeMin = Math.min(edgeMin, d);
         }
-        if (fl > tiny) near.push({ x: fnrm[f] / fl, y: fnrm[f + 1] / fl, z: fnrm[f + 2] / fl, area: fl, thin: false });
+        if (fl > tiny) near.push({ x: fnrm[f] / fl, y: fnrm[f + 1] / fl, z: fnrm[f + 2] / fl, area: fl, thin: false, floor: faceFloor[j] });
       }
-      // area-weighted vertex normal, kept in the end plane on the two open rings
-      let mx = vnrm[q], my = vnrm[q + 1], mz = end ? 0 : vnrm[q + 2];
-      let len = Math.hypot(mx, my, mz);
-      if (!(len > tiny)) {                       // degenerate (flat) neighbourhood: go radially
-        mx = pos[q]; my = pos[q + 1]; mz = 0;
-        len = Math.hypot(mx, my) || 1;
-      }
-      mx /= len; my /= len; mz /= len;
-      let [dx, dy, dz] = wallOffset(near, mx, my, mz, wall, end);
       const capLen = Math.min(MITER_MAX * wall, EDGE_FRACTION * edgeMin, 0.9 * clear);
-      const dl = Math.hypot(dx, dy, dz);
-      if (dl > capLen) { dx *= capLen / dl; dy *= capLen / dl; dz *= capLen / dl; }
-      // keep the inner copy of a short end ring from folding over (rims are planar: dz = 0)
-      if (Math.abs(dz) > EDGE_FRACTION * upright) dz = Math.sign(dz) * EDGE_FRACTION * upright;
-      for (const f of near) {
-        const th = f.x * dx + f.y * dy + f.z * dz;
-        thickMin = Math.min(thickMin, th);
-        thickMax = Math.max(thickMax, th);
+      // inner offset for these faces about the normal (mx, my, mz), capped:
+      // [dx, dy, dz, thinnest wall, thickest wall] over the faces
+      const solve = (faces, mx, my, mz) => {
+        for (const fc of faces) fc.thin = false;
+        if (end) mz = 0;                         // kept in the end plane on the two open rings
+        let len = Math.hypot(mx, my, mz);
+        if (!(len > tiny)) {                     // degenerate (flat) neighbourhood: go radially
+          mx = pos[q]; my = pos[q + 1]; mz = 0;
+          len = Math.hypot(mx, my) || 1;
+        }
+        let [dx, dy, dz] = wallOffset(faces, mx / len, my / len, mz / len, wall, end);
+        const dl = Math.hypot(dx, dy, dz);
+        if (dl > capLen) { dx *= capLen / dl; dy *= capLen / dl; dz *= capLen / dl; }
+        // keep the inner copy of a short end ring from folding over (rims are planar: dz = 0)
+        if (Math.abs(dz) > EDGE_FRACTION * upright) dz = Math.sign(dz) * EDGE_FRACTION * upright;
+        let lo = Infinity, hi = 0;
+        for (const fc of faces) { const th = fc.x * dx + fc.y * dy + fc.z * dz; lo = Math.min(lo, th); hi = Math.max(hi, th); }
+        return [dx, dy, dz, lo, hi];
+      };
+      const sideOf = (faces) => {                // area-weighted normal of some of the faces
+        let sx = 0, sy = 0, sz = 0;
+        for (const fc of faces) { sx += fc.x * fc.area; sy += fc.y * fc.area; sz += fc.z * fc.area; }
+        return solve(faces, sx, sy, sz);
+      };
+      let off = solve(near, vnrm[q], vnrm[q + 1], vnrm[q + 2]), up = null, top = 0;
+      if (!end && off[3] < SPLIT_BELOW * wall) {
+        const floors = [...new Set(near.map((fc) => fc.floor))];
+        if (floors.length === 2) {
+          top = Math.max(floors[0], floors[1]);
+          const lower = sideOf(near.filter((fc) => fc.floor !== top)), higher = sideOf(near.filter((fc) => fc.floor === top));
+          if (Math.min(lower[3], higher[3]) > off[3]) { off = lower; up = higher; }
+        }
       }
+      for (const s of up ? [off, up] : [off]) { thickMin = Math.min(thickMin, s[3]); thickMax = Math.max(thickMax, s[4]); }
       const qi = q + 3 * nv;
-      pos[qi] = pos[q] - dx;
-      pos[qi + 1] = pos[q + 1] - dy;
-      pos[qi + 2] = pos[q + 2] - dz;
+      pos[qi] = pos[q] - off[0];
+      pos[qi + 1] = pos[q + 1] - off[1];
+      pos[qi + 2] = pos[q + 2] - off[2];
+      if (up) {
+        upper[v] = 2 * nv + extra.length / 3;
+        upperFloor[v] = top;
+        extra.push(pos[q] - up[0], pos[q + 1] - up[1], pos[q + 2] - up[2]);
+        splits++;
+      }
     }
   }
+  const all = extra.length ? new Float64Array(6 * nv + extra.length) : pos;
+  if (extra.length) { all.set(pos); all.set(extra, 6 * nv); }
+  const innerOf = (v, j) => (upper[v] >= 0 && faceFloor[j] === upperFloor[v] ? upper[v] : v + nv);
 
   // rim: directed outer edges u -> w with no reverse (the two end rings)
   const M = 2 * nv;
@@ -201,24 +240,46 @@ export function tubeMesh(design, opts = {}) {
     }
   }
 
-  const T = 2 * F + rim.length;                  // outer + inner + 2 per rim edge
+  // band along a split fold, ring k: the lower floor's inner surface ends at d = v + nv,
+  // the upper floor's starts at u = upper[v]. Seen from outside, the lower floor runs
+  // along the ring from i + 1 to i and the upper floor from i to i + 1 (buildTube), so
+  // the band d(i+1) -> d(i) -> u(i) -> u(i+1) closes the shell; a mirrored tube runs the
+  // other way. An unsplit end (u = d) leaves one triangle of the quad.
+  const band = [];
+  for (let k = 0; k <= N; k++) {
+    for (let i = 0; i < n; i++) {
+      const v0 = k * n + i, v1 = k * n + (i + 1) % n;
+      if (upper[v0] < 0 && upper[v1] < 0) continue;
+      const d0 = v0 + nv, d1 = v1 + nv;
+      const u0 = upper[v0] >= 0 ? upper[v0] : d0, u1 = upper[v1] >= 0 ? upper[v1] : d1;
+      const quad = dist2(all, d1, u0) <= dist2(all, d0, u1) ? [[d1, d0, u0], [d1, u0, u1]] : [[d1, d0, u1], [d0, u0, u1]];
+      for (const [a, b, e] of quad) {
+        if (a === b || b === e || e === a) continue;
+        if (design.chirEff < 0) band.push(a, e, b); else band.push(a, b, e);
+      }
+    }
+  }
+
+  const T = 2 * F + rim.length + band.length / 3;   // outer + inner + 2 per rim edge + band
   const tri = new Uint32Array(3 * T);
   let t = 0;
   const put = (a, b, d) => { tri[t++] = a; tri[t++] = b; tri[t++] = d; };
   for (let j = 0; j < F; j++) put(outer[3 * j], outer[3 * j + 1], outer[3 * j + 2]);
-  for (let j = 0; j < F; j++) put(outer[3 * j] + nv, outer[3 * j + 2] + nv, outer[3 * j + 1] + nv);
+  for (let j = 0; j < F; j++) put(innerOf(outer[3 * j], j), innerOf(outer[3 * j + 2], j), innerOf(outer[3 * j + 1], j));
   for (let r = 0; r < rim.length; r += 2) {
     // end-cap quad w -> u -> iu -> iw runs against both rims; split on the shorter diagonal
     const u = rim[r], w = rim[r + 1], iu = u + nv, iw = w + nv;
-    if (dist2(pos, w, iu) <= dist2(pos, u, iw)) { put(w, u, iu); put(w, iu, iw); }
+    if (dist2(all, w, iu) <= dist2(all, u, iw)) { put(w, u, iu); put(w, iu, iw); }
     else { put(w, u, iw); put(u, iu, iw); }
   }
+  for (let b = 0; b < band.length; b += 3) put(band[b], band[b + 1], band[b + 2]);
 
   const header = tubeHeader(design, wall, clamped, tube.endRings, stateTag(c, mode));
   return {
-    positions: pos, triangles: tri, header, endRings: tube.endRings,
+    positions: all, triangles: tri, header, endRings: tube.endRings,
     wall, wallRequested: requested, clamped, clearRadius: clear,
     thickness: { min: Number.isFinite(thickMin) ? thickMin : 0, max: thickMax },
+    splitVertices: splits,
   };
 }
 

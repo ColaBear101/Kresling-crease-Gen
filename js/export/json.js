@@ -110,11 +110,16 @@ function isCreaseGen(raw) {
  */
 export function fromCreaseGen(raw) {
   if (!isPlainObject(raw)) return { ok: false, error: `This is not a ${CREASE_GEN} preset.` };
+  // A value that is missing, empty (an empty box exports as null) or not a number
+  // takes that app's default, and a note lists it; the shape values have no default.
+  const filled = [];
   const num = (k) => {
     let v = raw[k];
-    if (v === undefined || v === null || v === '') v = LEGACY_DEFAULTS[k];
-    if (typeof v === 'string') v = Number(v);
-    return typeof v === 'number' && Number.isFinite(v) ? v : NaN;
+    if (typeof v === 'string' && v.trim() !== '') v = Number(v);
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (!Object.prototype.hasOwnProperty.call(LEGACY_DEFAULTS, k)) return NaN;
+    if (!filled.includes(k)) filled.push(k);
+    return LEGACY_DEFAULTS[k];
   };
   const need = ['dia', 'height', 'n', 'floors', 'angle'];
   const missing = need.filter((k) => !Number.isFinite(num(k)));
@@ -124,7 +129,7 @@ export function fromCreaseGen(raw) {
   const dia = num('dia'), height = num('height'), angle = num('angle');
   const n = Math.round(num('n')), floors = Math.round(num('floors'));
   if (!(n >= 3 && floors >= 1 && dia > 0 && height > 0 && angle > 0 && angle < 180)) {
-    return { ok: false, error: `This ${CREASE_GEN} preset does not describe a tube (sides, floors, diameter, height and angle must be positive).` };
+    return { ok: false, error: `This ${CREASE_GEN} preset does not describe a tube: it needs at least 3 sides and 1 floor, a diameter and height above 0, and an angle between 0° and 180°.` };
   }
 
   const side = (Math.PI * dia) / n;                       // cm
@@ -136,8 +141,8 @@ export function fromCreaseGen(raw) {
   const gamma = (Math.atan2(fh, across) * 180) / Math.PI;
   const chir = rightHanded ? 1 : -1;
 
-  const hasSeam = raw.seaml !== undefined || raw.seamr !== undefined;
-  const seamAuto = raw.seamAuto === undefined ? !hasSeam : raw.seamAuto === true || raw.seamAuto === 'true' || raw.seamAuto === 1;
+  // a file without seamAuto opens in auto mode, as in a freshly opened Kresling-crease-Gen
+  const seamAuto = raw.seamAuto === undefined || raw.seamAuto === true || raw.seamAuto === 'true' || raw.seamAuto === 1;
   const want = {
     designBy: 'flat', n, dia: (10 * side) / Math.sin(Math.PI / n), hFlat: 10 * fh, angle: gamma, chir,
     floors, stack: Math.round(num('stack')), stacking: 'alternate',
@@ -165,11 +170,17 @@ export function fromCreaseGen(raw) {
   // promising creases the pattern view will not show.
   const design = computeDesign(params);
   const drawable = design.valid;
-  notes.push(drawable ? `${CREASE_GEN} preset, converted from cm to mm with the same creases.`
-    : `${CREASE_GEN} preset, converted from cm to mm. ${APP_NAME} draws no pattern for it: ${design.errors[0] || 'the design is not valid.'}`);
-  notes.push(`Diameter ${trim(10 * dia)} → ${trim(params.dia)} mm: the tube closes on the printed polygon side, which makes it this wide.`);
+  if (drawable) {
+    notes.push(`${CREASE_GEN} preset, converted from cm to mm: every crease is in the same place.`);
+    notes.push(`Diameter ${trim(10 * dia)} → ${trim(params.dia)} mm: the tube closes on the printed polygon side, which makes it this wide.`);
+  } else {
+    notes.push(`${CREASE_GEN} preset, converted from cm to mm. ${APP_NAME} draws no pattern for it: ${design.errors[0] || 'the design is not valid.'}`);
+    notes.push(`Diameter ${trim(10 * dia)} → ${trim(params.dia)} mm (the circle through the corners of the printed polygon).`);
+  }
   if (Math.abs(gamma - angle) > 0.05) notes.push(`Crease angle ${trim(angle)}° → ${trim(gamma)}°: this app shows the angle as drawn.`);
   if (chir !== hand) notes.push(`Handedness reads ${chir > 0 ? 'right' : 'left'}-handed here: it is named by the way the first floor leans.`);
+  const flipped = drawable ? foldsThatDiffer(design, params, rightHanded) : '';
+  if (flipped) notes.push(`Mountain and valley follow the folded shape here, so not every fold matches that app's colours: the ${flipped}.`);
   if (raw.material !== 'polyimide') {
     notes.push(`The preset's sheet is "Generic (unmodeled)", so the analysis uses ${MATERIALS[params.material].label}.`);
   }
@@ -180,10 +191,49 @@ export function fromCreaseGen(raw) {
     const unit = s.unit ? ` ${s.unit}` : '';
     notes.push(`${SOFT_LABELS[key]} limited to ${trim(params[key])}${unit} (the preset has ${trim(want[key])}${unit}).`);
   }
+  // defaults that stood in for missing values, where they matter for this preset
+  const used = Object.keys(LEGACY_DEFAULTS).filter((k) => filled.includes(k)
+    && !(seamAuto ? ['seaml', 'seamr'] : ['extcols']).includes(k) && (k !== 'thick' || raw.material === 'polyimide'));
+  if (used.length) notes.push(`Empty or not a number in the preset, so these use that app's defaults: ${used.map((k) => DEFAULT_WORDS[k](LEGACY_DEFAULTS[k])).join(', ')}.`);
   return { ok: true, params, ignored: Object.keys(raw).filter((k) => !LEGACY_KEYS.has(k)), source: 'crease-gen', notes, drawable };
 }
 
 function trim(x) { return String(+Number(x).toFixed(2)); }
+
+// How a default reads in the note, in that app's own words and units.
+const DEFAULT_WORDS = {
+  ext: (v) => `End ext ${v} cm`, seaml: (v) => `Seam left ${v} cm`, seamr: (v) => `Seam right ${v} cm`,
+  extcols: (v) => `Extra cols ${v}`, stack: (v) => `Stack count ${v}`, scale: (v) => `Scale ${v}%`,
+  wallmm: (v) => `Wall ${v} mm`, thick: (v) => `Thickness ${v} µm`, chir: (v) => (v === -1 ? 'Left-hand' : 'Right-hand'),
+};
+
+const FOLD_NAMES = { long: 'long diagonals', short: 'short diagonals', ring: 'polygon folds', end: 'end-ring folds' };
+
+/**
+ * The fold families that print the other way round from Kresling-crease-Gen, as
+ * text ("polygon folds and end-ring folds are mountain"), or ''. That app draws its
+ * red diagonals as mountain and the green ones and every row as valley; its red
+ * diagonal is the long one when the first floor leans right (see fromCreaseGen).
+ */
+function foldsThatDiffer(design, params, rightHanded) {
+  const red = rightHanded ? 'long' : 'short', green = rightHanded ? 'short' : 'long';
+  const theirs = { [red]: 'mountain', [green]: 'valley', ring: 'valley', end: 'valley' };
+  const present = {
+    long: true, short: true,
+    ring: params.floors * params.stack > 1,                 // rows between floors
+    end: params.ringBottom > 0 || params.ringTop > 0,        // rows where an end ring meets the body
+  };
+  const groups = {};
+  for (const f of ['long', 'short', 'ring', 'end']) {
+    if (!present[f] || design.folds[f] === theirs[f]) continue;
+    (groups[design.folds[f]] = groups[design.folds[f]] || []).push(FOLD_NAMES[f]);
+  }
+  return Object.entries(groups).map(([kind, names]) => `${joinWords(names)} are ${kind}`).join('; the ');
+}
+
+function joinWords(list) {
+  return list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
+}
 
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);

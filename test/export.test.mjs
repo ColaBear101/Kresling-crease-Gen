@@ -637,7 +637,7 @@ test('json: a Kresling-crease-Gen preset opens as the same sheet, crease for cre
     const r = readDesignFile(JSON.stringify(p));
     ok(r.ok, `${tag}: ${r.error}`);
     eq(r.source, 'crease-gen', tag); eq(r.drawable, true, tag); eq(r.ignored.length, 0, `${tag}: nothing left out`);
-    ok(/same creases/.test(r.notes[0]), `${tag}: says the creases are kept`);
+    ok(/every crease is in the same place/.test(r.notes[0]), `${tag}: says the creases are kept`);
     const q = r.params;
     eq(q.designBy, 'flat'); eq(q.n, p.n); eq(q.floors, p.floors); eq(q.stack, p.stack); eq(q.stacking, 'alternate');
     eq(q.scale, p.scale); near(q.ringBottom, 10 * p.ext, 1e-9, 'bottom ring in mm'); near(q.ringTop, 10 * p.ext, 1e-9, 'top ring in mm'); eq(q.wall, p.wallmm);
@@ -692,12 +692,15 @@ test('json: a Kresling-crease-Gen preset opens as the same sheet, crease for cre
 test('json: Kresling-crease-Gen presets that cannot be drawn or rebuilt say why', () => {
   const b6 = readDesignFile(JSON.stringify(CG.bistable6));       // no rigid fold: opens, but nothing is drawn
   ok(b6.ok && b6.drawable === false, 'opens');
-  ok(/draws no pattern/.test(b6.notes[0]) && !/same creases/.test(b6.notes.join(' ')), b6.notes[0]);
+  ok(/draws no pattern/.test(b6.notes[0]) && !/same place/.test(b6.notes.join(' ')), b6.notes[0]);
+  ok(!/closes on the printed polygon side/.test(b6.notes.join(' ')), 'no claim that a tube closes when it cannot');
+  ok(b6.notes.some((t) => /Diameter 40 → 41\.89 mm \(the circle through the corners of the printed polygon\)/.test(t)), b6.notes.join(' | '));
   eq(computeDesign(b6.params).valid, false);
   for (const [over, re] of [
-    [{ height: 2, floors: 20 }, /floor height \(1 mm\) is outside 2–150 mm/],
-    [{ dia: 8, height: 6, floors: 6, angle: 60 }, /drawn crease angle \(40\.89°\) is outside 45–160°/],
-    [{ n: 2 }, /does not describe a tube/],
+    [{ height: 1, floors: 20 }, /floor height \(0\.5 mm\) is outside 1–200 mm/],
+    [{ dia: 12, height: 2, n: 3, floors: 4, angle: 160, chir: -1 }, /drawn crease angle \(10\.31°\) is outside 15–160°/],
+    [{ n: 2 }, /does not describe a tube: it needs at least 3 sides and 1 floor/],
+    [{ angle: 180 }, /an angle between 0° and 180°/],
     [{ dia: null }, /no number for dia/],
     [{ angle: 'steep' }, /no number for angle/],
   ]) {
@@ -706,6 +709,46 @@ test('json: Kresling-crease-Gen presets that cannot be drawn or rebuilt say why'
     ok(r.error.length < 200, 'one readable sentence');
   }
   eq(readDesignFile(JSON.stringify({ height: 20, n: 6 })).ok, false, 'height alone is not enough');
+  // empty or non-numeric values that are not part of the shape: that app's default, and a note says which
+  const holes = readDesignFile(JSON.stringify({ ...CG.default, ext: null, scale: null, stack: 'x' }));
+  ok(holes.ok, holes.error);
+  eq(holes.params.ringBottom, 20); eq(holes.params.ringTop, 20); eq(holes.params.scale, 100); eq(holes.params.stack, 1);
+  ok(holes.notes.some((t) => t === "Empty or not a number in the preset, so these use that app's defaults: End ext 2 cm, Stack count 1, Scale 100%."), holes.notes.join(' | '));
+  ok(!holes.notes.some((t) => /NaN/.test(t)), 'no NaN in any note');
+  ok(!readDesignFile(JSON.stringify(CG.default)).notes.some((t) => /defaults/.test(t)), 'no defaults note when nothing was empty');
+  const { seamAuto, ...noKey } = CG.default;
+  eq(readDesignFile(JSON.stringify(noKey)).params.seamAuto, true, 'no seamAuto key: auto, as a freshly opened Kresling-crease-Gen');
+});
+
+test('json: every preset Kresling-crease-Gen can make opens, and the note names folds that change direction', () => {
+  // its slider ranges: diameter 1-12 cm, height 2-40 cm, 3-20 sides, 2-20 floors, angle 60-140 deg
+  let opened = 0, drawn = 0;
+  for (const n of [3, 4, 6, 12, 20]) for (const dia of [1, 6.5, 12]) for (const height of [2, 21, 40]) {
+    for (const floors of [2, 11, 20]) for (const angle of [60, 87.5, 90, 100, 140]) for (const chir of [1, -1]) {
+      const r = readDesignFile(JSON.stringify({ ...CG.default, n, dia, height, floors, angle, chir }));
+      ok(r.ok, `${JSON.stringify({ n, dia, height, floors, angle, chir })}: ${r.error}`);
+      if (!r.ok) continue;
+      opened++;
+      if (!r.drawable) continue;
+      drawn++;
+      // the note lists exactly the families whose fold differs from red = mountain, green and rows = valley
+      const d = computeDesign(r.params);
+      const red = r.params.chir > 0 ? 'long' : 'short';
+      const theirs = { long: red === 'long' ? 'mountain' : 'valley', short: red === 'short' ? 'mountain' : 'valley', ring: 'valley', end: 'valley' };
+      const names = { long: 'long diagonals', short: 'short diagonals', ring: 'polygon folds', end: 'end-ring folds' };
+      const flips = Object.keys(theirs).filter((f) => d.folds[f] !== theirs[f]);
+      const note = r.notes.find((t) => t.startsWith('Mountain and valley follow the folded shape')) || '';
+      for (const f of Object.keys(names)) eq(note.includes(names[f]), flips.includes(f), `${f} named exactly when it flips: ${note}`);
+    }
+  }
+  ok(opened === 1350 && drawn > 400, `${opened} opened, ${drawn} drawn`);
+  // the three the review found refused before: a 200 mm floor, a 40.89 deg drawn angle, a 1 mm floor
+  for (const o of [{ dia: 2, height: 40, n: 4, floors: 2, angle: 87.5 }, { dia: 5, height: 6, n: 6, floors: 6, angle: 120, chir: -1 }, { dia: 4, height: 2, n: 6, floors: 20 }]) {
+    const r = readDesignFile(JSON.stringify({ ...CG.default, ...o }));
+    ok(r.ok && r.drawable, `${JSON.stringify(o)}: ${r.error || r.notes[0]}`);
+  }
+  const def = readDesignFile(JSON.stringify(CG.default));
+  ok(def.notes.includes("Mountain and valley follow the folded shape here, so not every fold matches that app's colours: the polygon folds and end-ring folds are mountain."), def.notes.join(' | '));
   // values outside this app's ranges that do not move a crease are limited, and the note says so
   const soft = readDesignFile(JSON.stringify({ ...CG.default, seaml: 7, wallmm: 9, flap: 1 }));
   ok(soft.ok, soft.error);

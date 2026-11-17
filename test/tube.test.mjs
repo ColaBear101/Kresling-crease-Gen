@@ -5,7 +5,7 @@ import { buildTube, foldStates, point, ringHeights } from '../js/core/tube.js';
 import { moldLayout, moldNotes, MOLD_MARGIN, RIDGE_FILL } from '../js/core/mold.js';
 import { DEFAULTS, PRESETS, normalizeParams, migrateParams } from '../js/core/params.js';
 import { sub, cross, dot, norm } from '../js/core/kresling.js';
-import { tubeMesh, moldMesh, moldSTL, meshStats, binarySTL } from '../js/export/stl.js';
+import { tubeMesh, moldMesh, moldSTL, meshStats, binarySTL, SPLIT_BELOW } from '../js/export/stl.js';
 import { tubeViewMesh, paintOrder } from '../js/render/view3d.js';
 import { test, near, ok, eq, run } from './harness.mjs';
 
@@ -129,7 +129,9 @@ test('tube STL carries the end rings: closed shell from -ext to height + ext', (
     // the two rings add about a thin prism wall of polygon perimeter x wall x 2 ext
     const w = ringed.wall, shell = d.n * d.a * w - d.n * w * w * Math.tan(Math.PI / d.n);
     const added = s1.volume - s0.volume, expect = shell * 2 * 20;
-    ok(Math.abs(added - expect) < 0.1 * expect, `${key}: rings add ${added.toFixed(0)} mm3, about ${expect.toFixed(0)}`);
+    // (the difference also counts the floor walls next to the rings, which are offset differently
+    // with a ring there and without one, so it is checked loosely; the shell check below is tight)
+    ok(Math.abs(added - expect) < 0.15 * expect, `${key}: rings add ${added.toFixed(0)} mm3, about ${expect.toFixed(0)}`);
     ok(ringed.header.includes('rings 20') && !plain.header.includes('rings'), `${key} header`);
     eq(ringed.endRings.bottom, 20); eq(ringed.endRings.top, 20); eq(plain.endRings.bottom + plain.endRings.top, 0);
     ok(ringed.thickness.min > 0.5 * w, `${key}: wall stays above half the nominal (${ringed.thickness.min.toFixed(2)} mm)`);
@@ -156,9 +158,7 @@ test('short end rings keep the STL wall (the upright ring edge only limits the v
 
 test('bottom and top rings of different lengths, or only one: closed STL from -bottom to height + top', () => {
   for (const [rb, rt] of [[10, 30], [0, 15], [25, 0], [0.5, 60]]) {
-    // (same-hand stacking thins the STL wall on its own, with or without rings, so it is checked on the
-    // default design only; the disc and the tower use alternating floors)
-    for (const over of [{}, { chir: -1 }, { stacking: 'helical' }, PRESETS.tower8.params, PRESETS.disc12.params]) {
+    for (const over of [{}, { chir: -1 }, { stacking: 'helical' }, PRESETS.tower8.params, PRESETS.disc12.params, { ...PRESETS.disc12.params, stacking: 'helical' }]) {
       const tag = `${rb}/${rt} ${JSON.stringify(over)}`;
       const d = computeDesign(P({ ...over, ringBottom: rb, ringTop: rt }));
       const N = d.totalFloors, n = d.n;
@@ -179,7 +179,9 @@ test('bottom and top rings of different lengths, or only one: closed STL from -b
       near(s.bbox.min[2], -rb, 1e-3, `${tag}: bottom`); near(s.bbox.max[2], d.lengths.deployed + rt, 1e-3, `${tag}: top`);
       eq(m.endRings.bottom, rb); eq(m.endRings.top, rt);
       ok(m.header.length <= 80 && m.header.includes(`${rb}/${rt}`), `${tag}: header ${m.header}`);
-      ok(m.thickness.min > 0.4 * m.wall, `${tag}: wall ${m.thickness.min.toFixed(2)} mm (60 mm rings on the 12-gon disc: about 0.45 x, see stl.js)`);
+      // a ring under 3 mm limits how far its inner corner may move up or down (see the short-ring test)
+      const least = Math.min(rb || Infinity, rt || Infinity) < 3 ? 0.6 : 0.74;
+      ok(m.thickness.min > least * m.wall, `${tag}: wall ${m.thickness.min.toFixed(2)} mm`);
       const v = tubeViewMesh(d, 0, 'uniform', null);
       eq(v.nV, t.rings.length * n); near(v.zMin, -rb, 1e-12); near(v.zMax, d.lengths.deployed + rt, 1e-9);
       eq(Array.from(v.faceRing).filter((r) => r === 1).length, rb > 0 ? 2 * n : 0, `${tag}: bottom ring in the 3-D view`);
@@ -226,6 +228,46 @@ test('mold border is left out beside an end ring too narrow for both ridges, and
       ok(meshStats(moldSTL(m, which)).watertight, `${tag}: ${which} plate closed`);
     }
   }
+});
+
+test('tube STL keeps its wall where floors meet: same-hand floors and end-ring corners split the inner vertex', () => {
+  const shell = (m) => {     // volume / (outer area x wall): about 1 for a shell of even thickness
+    const P = m.positions, T = m.triangles, nv = (P.length / 3 - m.splitVertices) / 2;
+    let area = 0;
+    for (let t = 0; t < T.length / 3; t++) {
+      const a = 3 * T[3 * t], b = 3 * T[3 * t + 1], c = 3 * T[3 * t + 2];
+      if (a >= 3 * nv || b >= 3 * nv || c >= 3 * nv) break;            // outer faces come first
+      const u = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]], v = [P[c] - P[a], P[c + 1] - P[a + 1], P[c + 2] - P[a + 2]];
+      area += norm(cross(u, v)) / 2;
+    }
+    return meshStats(binarySTL(m, m.header)).volume / (area * m.wall);
+  };
+  const designs = { default: {}, ...Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, v.params])) };
+  let splitSome = 0;
+  for (const [key, pr] of Object.entries(designs)) {
+    for (const stacking of ['alternate', 'helical']) {
+      for (const chir of [1, -1]) {
+        for (const [rb, rt] of [[0, 0], [10, 10], [0, 25], [60, 5]]) {
+          const tag = `${key} ${stacking} ${chir} rings ${rb}/${rt}`;
+          const d = computeDesign(P({ ...pr, stacking, chir, ringBottom: rb, ringTop: rt }));
+          const m = tubeMesh(d, { compress: 0 });
+          const s = meshStats(binarySTL(m, m.header));
+          ok(s.watertight && s.degenerate === 0, `${tag}: closed, no degenerate triangles`);
+          ok(m.thickness.min >= 0.74 * m.wall, `${tag}: thinnest wall ${(m.thickness.min / m.wall).toFixed(2)} x`);
+          const r = shell(m);
+          ok(r > 0.93 && r < 1.07, `${tag}: volume ${r.toFixed(3)} x outer area x wall`);
+          if (m.splitVertices) splitSome++;
+        }
+      }
+    }
+  }
+  ok(splitSome > 20, `${splitSome} meshes needed split folds`);
+  // the default alternating tube needs none, so its STL is as before
+  eq(tubeMesh(computeDesign(P()), { compress: 0 }).splitVertices, 0);
+  // the 12-gon disc with same-hand floors: 0.03 x wall before the split
+  const disc = tubeMesh(computeDesign(P({ ...PRESETS.disc12.params, stacking: 'helical' })), { compress: 0 });
+  ok(disc.splitVertices > 0 && disc.thickness.min > 0.9 * disc.wall, `disc ${(disc.thickness.min / disc.wall).toFixed(2)} x`);
+  ok(SPLIT_BELOW > 0.5 && SPLIT_BELOW < 1);
 });
 
 test('tube STL header fits 80 bytes without cutting the fold state', () => {
