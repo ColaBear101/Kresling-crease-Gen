@@ -1,307 +1,49 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Kresling Crease Generator v24</title>
-<link rel="stylesheet" href="css/base.css">
-<link rel="stylesheet" href="css/toolbar.css">
-<link rel="stylesheet" href="css/sidebar.css">
-<link rel="stylesheet" href="css/main-panels.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kresling Studio</title>
+<meta name="description" content="Design Kresling origami tubes: exact crease pattern, 3-D fold preview, bistability, snap force, vibration and buckling checks, and fabrication exports (SVG, PDF, PNG, DXF, STL, press molds).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/flat.css">
+<link rel="stylesheet" href="css/view3d.css">
+<link rel="stylesheet" href="css/panels.css">
 <link rel="stylesheet" href="css/explorer.css">
-<link rel="stylesheet" href="css/modal.css">
-<link rel="stylesheet" href="css/misc.css">
-<link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
-<div class="app">
-  <div class="toolbar">
-    <span class="toolbar-title">KRESLING</span>
-    <select id="preset-select" onchange="loadPreset(this.value)" title="Load a preset configuration" style="font-size:11px;padding:3px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif;outline:none">
-      <option value="">Presets ▾</option>
-      <option value="bistable6">Bistable n=6</option>
-      <option value="bistable8">Bistable n=8</option>
-      <option value="monostable">Monostable</option>
-      <option value="tower">Tall tower</option>
-      <option value="flat">Flat disc</option>
-      <option value="compact">Compact unit</option>
-    </select>
-    <button class="tab-btn" onclick="importPreset()" title="Import preset JSON">⬆ Import</button>
-    <button class="tab-btn" onclick="exportPreset()" title="Export current settings as JSON">⬇ Export</button>
-    <span class="shortcut-hint" style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:2px">S=svg P=pdf F=fit R=reset 3-9=sides Ctrl+Z=undo</span>
-    <button class="tab-btn" onclick="toggleSourcesModal()" title="Academic sources & data behind the geometry, energy and material models">📖 Sources</button>
-    <a class="tab-btn" href="https://github.com/ColaBear101/Kresling-crease-Gen" target="_blank" rel="noopener noreferrer" title="View source code on GitHub">
-      <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.98 5.24.98 11.52c0 5.02 3.26 9.28 7.77 10.78.57.1.78-.25.78-.55 0-.27-.01-1.16-.02-2.1-3.16.69-3.83-1.34-3.83-1.34-.52-1.32-1.26-1.67-1.26-1.67-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.01 1.74 2.66 1.24 3.31.95.1-.73.4-1.24.72-1.53-2.52-.29-5.17-1.26-5.17-5.6 0-1.24.44-2.25 1.16-3.04-.12-.29-.5-1.45.11-3.02 0 0 .95-.3 3.11 1.16a10.8 10.8 0 0 1 5.66 0c2.16-1.46 3.11-1.16 3.11-1.16.61 1.57.23 2.73.11 3.02.72.79 1.16 1.8 1.16 3.04 0 4.35-2.65 5.31-5.18 5.59.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .3.2.65.78.54a11.03 11.03 0 0 0 7.75-10.77C23.02 5.24 18.27.5 12 .5Z"/></svg>
-      GitHub
-    </a>
-    <div id="validity-badge" class="badge ok" style="margin-left:auto">Foldable</div>
-  </div>
+<div id="app">
+  <header id="topbar" aria-label="Kresling Studio"></header>
 
-  <div class="main">
-    <!-- LEFT SIDEBAR -->
-    <div class="sidebar" id="sidebar">
-      <div class="sidebar-resize" id="sidebarResize"></div>
+  <aside id="sidebar" aria-label="Design parameters"></aside>
 
-      <div class="sec-label">Geometry</div>
-      <div class="ctrl"><label>Diameter (cm)</label><div class="ctrl-right"><input type="range" id="r-dia" min="1" max="12" step="0.5" value="3"><input class="num-inp" id="n-dia" type="number" min="1" max="12" step="0.5" value="3"></div></div>
-      <div class="ctrl"><label>Height (cm)</label><div class="ctrl-right"><input type="range" id="r-height" min="2" max="40" step="0.5" value="20"><input class="num-inp" id="n-height" type="number" min="2" max="40" step="0.5" value="20"></div></div>
-      <div class="ctrl"><label>Sides (n)</label><div class="ctrl-right"><input type="range" id="r-n" min="3" max="20" step="1" value="6"><input class="num-inp" id="n-n" type="number" min="3" max="20" step="1" value="6"></div></div>
-      <div class="ctrl"><label>Floors</label><div class="ctrl-right"><input type="range" id="r-floors" min="2" max="20" step="1" value="10"><input class="num-inp" id="n-floors" type="number" min="2" max="20" step="1" value="10"></div></div>
-      <div class="ctrl"><label>Angle BR (°)</label><div class="ctrl-right"><input type="range" id="r-angle" min="60" max="140" step="0.5" value="100"><input class="num-inp" id="n-angle" type="number" min="60" max="140" step="0.5" value="100"></div></div>
-      <div style="padding:2px 4px 6px;display:flex;gap:4px">
-        <button onclick="snapToBistable()" title="Moves Angle BR to the middle of the range where the drawn pattern folds rigidly into two stable shapes (exact two-state solution)" style="flex:1;font-size:10px;padding:4px 4px;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--accent2);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">⚡ Bistable</button>
-        <button onclick="snapToMonostable()" title="Moves Angle BR to the angle closest to 90° that has a single stable shape, at least 2° away from any bistable angle" style="flex:1;font-size:10px;padding:4px 4px;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--yellow);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">⚖ Monostable</button>
-      </div>
-      <div class="ctrl"><label>Stack count</label><div class="ctrl-right"><input type="range" id="r-stack" min="1" max="4" step="1" value="1"><input class="num-inp" id="n-stack" type="number" min="1" max="4" step="1" value="1"></div></div>
-      <div class="ctrl ctrl-select" style="padding:3px 4px">
-        <label>Chirality</label>
-        <select id="chir"><option value="1">Right-hand</option><option value="-1">Left-hand</option></select>
-      </div>
-
-      <div class="sec-label">Material</div>
-      <div class="ctrl ctrl-select" style="padding:3px 4px" title="Drives the crease spring stiffness (k_m, k_v) used by the energy graph">
-        <label>Sheet material</label>
-        <select id="material">
-          <option value="generic">Generic (unmodeled)</option>
-          <option value="polyimide">Polyimide (Kapton-type)</option>
-        </select>
-      </div>
-      <div class="ctrl" title="Sheet thickness — only affects the energy graph when Sheet material = Polyimide"><label>Thickness (µm)</label><div class="ctrl-right"><input type="range" id="r-thick" min="6" max="125" step="0.5" value="50"><input class="num-inp" id="n-thick" type="number" min="6" max="125" step="0.5" value="50"></div></div>
-      <div style="font-size:9px;line-height:1.5;color:var(--text3);padding:4px 6px 8px;font-family:'JetBrains Mono',monospace" title="k_fold = E&#183;t&#179;&#183;L / (12&#183;(1&#8722;&#957;&#178;)&#183;w) — thin-plate torsional hinge, per Schenk &amp; Guest (2011) and Filipov, Tachi &amp; Paulino, PNAS (2015). E, &#957; for polyimide: DuPont Kapton&#174; HN datasheet (ASTM D-882). Effective bend width w is a modelling assumption, not a cited value — see js/physics/material.js.">
-        Sources: k formula — Schenk &amp; Guest (2011); Filipov, Tachi &amp; Paulino, <i>PNAS</i> (2015). E/&#957; — DuPont Kapton&#174; HN datasheet. ⓘ hover
-      </div>
-
-      <div class="sec-label">Layout</div>
-      <div class="ctrl"><label>End ext (cm)</label><div class="ctrl-right"><input type="range" id="r-ext" min="0" max="6" step="0.1" value="2"><input class="num-inp" id="n-ext" type="number" min="0" max="6" step="0.1" value="2"></div></div>
-      <div class="ctrl"><label>Seam left (cm)</label><div class="ctrl-right"><input type="range" id="r-seaml" min="0" max="6" step="0.1" value="1.4"><input class="num-inp" id="n-seaml" type="number" min="0" max="6" step="0.1" value="1.4"></div></div>
-      <div class="ctrl"><label>Seam right (cm)</label><div class="ctrl-right"><input type="range" id="r-seamr" min="0" max="6" step="0.1" value="0"><input class="num-inp" id="n-seamr" type="number" min="0" max="6" step="0.1" value="0"></div></div>
-      <div class="ctrl"><label>Extra cols</label><div class="ctrl-right"><input type="range" id="r-extcols" min="0" max="4" step="1" value="1"><input class="num-inp" id="n-extcols" type="number" min="0" max="4" step="1" value="1"></div></div>
-      <div class="ctrl-check" style="padding:2px 4px 6px">
-        <input type="checkbox" id="seam-auto-cb" checked>
-        <label for="seam-auto-cb" style="font-size:10px;color:var(--accent2)">Auto-fit seams to extra cols</label>
-      </div>
-
-      <div class="sec-label">Scale &amp; View</div>
-      <div class="scale-row">
-        <label>Scale (%)</label>
-        <div class="scale-full">
-          <input type="range" id="r-scale" min="10" max="200" step="1" value="100">
-          <input class="num-inp" id="n-scale" type="number" min="10" max="200" step="1" value="100" style="width:50px">
-        </div>
-      </div>
-      <div class="ctrl-check"><input type="checkbox" id="showA4" checked><label for="showA4">Show A4 border</label></div>
-      <div class="ctrl-check"><input type="checkbox" id="showGrid" checked><label for="showGrid">Show cm grid</label></div>
-      <div class="ctrl-check"><input type="checkbox" id="showmv" checked><label for="showmv">Show M/V colors</label></div>
-      <div class="ctrl-check"><input type="checkbox" id="showMountain" checked><label for="showMountain">Show mountain</label></div>
-      <div class="ctrl-check"><input type="checkbox" id="showValley" checked><label for="showValley">Show valley</label></div>
-      <div class="ctrl-check"><input type="checkbox" id="showDiagonal" checked><label for="showDiagonal">Show diagonal</label></div>
-
-      <div class="sec-label">STL Export</div>
-      <div class="ctrl"><label>Wall (mm)</label><div class="ctrl-right"><input type="range" id="r-wallmm" min="0.4" max="5" step="0.1" value="0.8"><input class="num-inp" id="n-wallmm" type="number" min="0.4" max="5" step="0.1" value="0.8"></div></div>
-      <div class="ctrl"><label>Mold base (mm)</label><div class="ctrl-right"><input type="range" id="r-moldbase" min="1" max="10" step="0.5" value="3"><input class="num-inp" id="n-moldbase" type="number" min="1" max="10" step="0.5" value="3"></div></div>
-      <div class="ctrl"><label>Ridge h (mm)</label><div class="ctrl-right"><input type="range" id="r-ridgeh" min="0.5" max="5" step="0.1" value="1.2"><input class="num-inp" id="n-ridgeh" type="number" min="0.5" max="5" step="0.1" value="1.2"></div></div>
-      <div class="ctrl"><label>Ridge w (mm)</label><div class="ctrl-right"><input type="range" id="r-ridgew" min="0.3" max="3" step="0.1" value="0.6"><input class="num-inp" id="n-ridgew" type="number" min="0.3" max="3" step="0.1" value="0.6"></div></div>
+  <main id="center">
+    <div id="center-tabs" class="tabs" role="tablist" aria-label="Centre view">
+      <button type="button" class="tab" role="tab" id="tab-pattern" data-tab="pattern" aria-controls="pane-pattern" aria-selected="true">Pattern</button>
+      <button type="button" class="tab" role="tab" id="tab-mold" data-tab="mold" aria-controls="pane-mold" aria-selected="false" tabindex="-1">Press molds</button>
+      <button type="button" class="tab" role="tab" id="tab-explorer" data-tab="explorer" aria-controls="pane-explorer" aria-selected="false" tabindex="-1">Explorer</button>
     </div>
+    <section id="pane-pattern" class="pane" role="tabpanel" aria-labelledby="tab-pattern"></section>
+    <section id="pane-mold" class="pane" role="tabpanel" aria-labelledby="tab-mold" hidden></section>
+    <section id="pane-explorer" class="pane" role="tabpanel" aria-labelledby="tab-explorer" hidden></section>
+  </main>
 
-    <!-- CENTER: tabbed — Crease Pattern | Mold Preview -->
-    <div class="flat-area">
-      <div class="center-tabs">
-        <button class="center-tab active" id="ctab-crease" onclick="switchCenterTab('crease')">Crease pattern</button>
-        <button class="center-tab" id="ctab-mold" onclick="switchCenterTab('mold')">Mold preview</button>
-        <button class="center-tab" id="ctab-explorer" onclick="switchCenterTab('explorer')">🧭 Design Explorer</button>
-        <div class="mold-sub-tabs" id="mold-sub-tabs" style="display:none">
-          <button class="mold-tab active" id="mtab-mountain" onclick="switchMoldTab('mountain')">Mountain</button>
-          <button class="mold-tab" id="mtab-valley" onclick="switchMoldTab('valley')">Valley</button>
-          <button class="mold-tab" id="mtab-both" onclick="switchMoldTab('both')">Both</button>
-        </div>
-      </div>
-      <!-- Crease pattern pane -->
-      <div id="center-pane-crease" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
-        <div id="warn-bar" class="warn-bar"></div>
-        <div class="stats-bar">
-          <div class="stat"><div class="stat-l">Floor h</div><div class="stat-v" id="s-fh">—</div></div>
-          <div class="stat"><div class="stat-l">Side</div><div class="stat-v" id="s-b">—</div></div>
-          <div class="stat"><div class="stat-l">Red</div><div class="stat-v" id="s-red">—</div></div>
-          <div class="stat"><div class="stat-l">Green</div><div class="stat-v" id="s-green">—</div></div>
-          <div class="stat"><div class="stat-l">Pat W</div><div class="stat-v" id="s-pw">—</div></div>
-          <div class="stat"><div class="stat-l">Pat H</div><div class="stat-v" id="s-ph">—</div></div>
-          <div class="stat"><div class="stat-l">h₀/R</div><div class="stat-v" id="s-h0r">—</div></div>
-          <div class="stat"><div class="stat-l">Bistable</div><div class="stat-v" id="s-bi">—</div></div>
-          <div class="stat"><div class="stat-l">A4 fit</div><div class="stat-v" id="s-fit">—</div></div>
-          <div class="stat"><div class="stat-l">Scale</div><div class="stat-v" id="s-scale">—</div></div>
-          <div class="stat"><div class="stat-l">Extend L</div><div class="stat-v" id="s-extlen">—</div></div>
-          <div class="stat"><div class="stat-l">Fold L</div><div class="stat-v" id="s-foldlen">—</div></div>
-          <div class="stat"><div class="stat-l">Fold ⌀i</div><div class="stat-v" id="s-foldid">—</div></div>
-          <div class="stat"><div class="stat-l">True ⌀</div><div class="stat-v" id="s-truedia">—</div></div>
-          <div class="stat"><div class="stat-l">Mass</div><div class="stat-v" id="s-mass">—</div></div>
-        </div>
-        <div class="mv-legend">
-          <span><span class="mv-dot" style="background:#378ADD"></span>Blue — valley</span>
-          <span><span class="mv-dot" style="background:#e05252"></span>Red — mountain</span>
-          <span><span class="mv-dot" style="border-top:2px dashed #3dba6e;background:none;width:20px;height:0"></span>Green — valley dashed</span>
-          <span><span class="mv-dot" style="background:#9f6fdf"></span>Purple — cut</span>
-          <span style="margin-left:auto"><span class="mv-dot" style="border:1px dashed #888;background:none;width:20px;height:0"></span>A4 frame</span>
-        </div>
-        <div class="flat-canvas-wrap">
-          <canvas id="flatCanvas"></canvas>
-        </div>
-      </div>
-      <!-- Mold preview pane -->
-      <div id="center-pane-mold" style="display:none;flex:1;min-height:0;overflow:hidden;background:#13151e;position:relative">
-        <canvas id="canvasMold" style="display:block;width:100%;height:100%"></canvas>
-      </div>
-      <!-- Design Explorer pane: requirements-in, possibilities-out grid search
-           over two chosen design axes (default n × angle). See js/explorer.js
-           and js/physics/buckling.js. -->
-      <div id="center-pane-explorer" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
-        <div class="exp-scroll">
-          <div class="exp-layout">
+  <aside id="right" aria-label="3-D preview and analysis">
+    <section id="pane-3d" class="pane" aria-label="3-D fold preview"></section>
+    <section id="pane-analysis" class="pane" aria-label="Analysis"></section>
+  </aside>
 
-            <div class="exp-form">
-              <div class="sec-label">Fixed design context</div>
-              <div class="ctrl"><label>Diameter (cm)</label><div class="ctrl-right"><input class="num-inp" id="exp-dia" type="number" step="0.1" style="width:100%"></div></div>
-              <div class="ctrl"><label>Height (cm)</label><div class="ctrl-right"><input class="num-inp" id="exp-height" type="number" step="0.5" style="width:100%"></div></div>
-              <div class="ctrl"><label>Floors</label><div class="ctrl-right"><input class="num-inp" id="exp-floors" type="number" step="1" style="width:100%"></div></div>
-              <div class="ctrl"><label>Stack</label><div class="ctrl-right"><input class="num-inp" id="exp-stack" type="number" step="1" style="width:100%"></div></div>
-              <div class="ctrl"><label>Sides n</label><div class="ctrl-right"><input class="num-inp" id="exp-n" type="number" step="1" style="width:100%"></div></div>
-              <div class="ctrl"><label>Angle (°)</label><div class="ctrl-right"><input class="num-inp" id="exp-angle" type="number" step="0.5" style="width:100%"></div></div>
-              <div class="ctrl" title="Kapton-type polyimide thickness — drives crease spring stiffness AND the buckling check"><label>Thickness (µm)</label><div class="ctrl-right"><input class="num-inp" id="exp-thick" type="number" step="1" style="width:100%"></div></div>
-              <div class="ctrl ctrl-select"><label>Chirality</label><select id="exp-chir"><option value="1">Right-hand</option><option value="-1">Left-hand</option></select></div>
-              <button class="tab-btn" id="exp-sync" style="width:100%;margin:6px 0 4px">↺ Sync from sidebar</button>
-              <div class="exp-hint">These stay fixed while the two scan axes below vary — whichever param you pick as an axis is overridden per grid point.</div>
-
-              <div class="sec-label">Scan axes</div>
-              <div class="ctrl ctrl-select"><label>X axis</label><select id="exp-xaxis"><option value="n">Sides (n)</option><option value="angle">Angle BR</option><option value="dia">Diameter</option><option value="thick">Thickness</option></select></div>
-              <div class="exp-range-row"><input class="num-inp" id="exp-xmin" type="number" title="min"><span>→</span><input class="num-inp" id="exp-xmax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-xsteps" type="number" title="steps" style="width:40px"></div>
-              <div class="ctrl ctrl-select"><label>Y axis</label><select id="exp-yaxis"><option value="n">Sides (n)</option><option value="angle" selected>Angle BR</option><option value="dia">Diameter</option><option value="thick">Thickness</option></select></div>
-              <div class="exp-range-row"><input class="num-inp" id="exp-ymin" type="number" title="min"><span>→</span><input class="num-inp" id="exp-ymax" type="number" title="max"><span>steps</span><input class="num-inp" id="exp-ysteps" type="number" title="steps" style="width:40px"></div>
-
-              <div class="sec-label">Requirements</div>
-              <div class="ctrl-check"><input type="checkbox" id="exp-req-bistable" checked><label for="exp-req-bistable">Must be bistable (two strain-free shapes)</label></div>
-              <div class="ctrl-check"><input type="checkbox" id="exp-req-buckling" checked><label for="exp-req-buckling">Must not buckle before snapping</label></div>
-              <div class="ctrl"><label>Safety factor</label><div class="ctrl-right"><input class="num-inp" id="exp-safety" type="number" step="0.1" value="1.5" style="width:100%"></div></div>
-              <div class="ctrl ctrl-select"><label>End condition</label><select id="exp-endcond"><option value="pinned">Pinned-pinned</option><option value="fixed-free">Fixed-free (cantilever)</option></select></div>
-              <div class="ctrl-check"><input type="checkbox" id="exp-req-a4" checked><label for="exp-req-a4">Must fit one A4 sheet (current scale/layout)</label></div>
-
-              <button class="tab-btn" id="exp-run" style="margin-top:10px;width:100%;background:var(--accent-dim);border-color:var(--accent);color:var(--accent2)">▶ Compute possibilities</button>
-              <div class="exp-hint" id="exp-status" style="min-height:2.4em"></div>
-            </div>
-
-            <div class="exp-results">
-              <div class="exp-canvas-wrap" id="expCanvasWrap">
-                <canvas id="canvasExplorer"></canvas>
-                <div id="exp-tooltip" class="exp-tooltip"></div>
-                <div class="exp-canvas-empty" id="exp-canvas-empty">
-                  <span class="exp-canvas-empty-icon">🧭</span>
-                  Set your fixed design context and scan axes on the left,<br>then click <b>Compute possibilities</b> to see the results here.
-                </div>
-              </div>
-              <div class="exp-legend">
-                <span><span class="exp-sw" style="background:#22c55e"></span>meets all requirements</span>
-                <span><span class="exp-sw" style="background:#a16207"></span>meets 2/3</span>
-                <span><span class="exp-sw" style="background:#b45309"></span>meets 1/3</span>
-                <span><span class="exp-sw" style="background:#7f1d1d"></span>valid, meets none</span>
-                <span><span class="exp-sw" style="background:#2a2f3e"></span>invalid geometry</span>
-                <span><span class="exp-sw" style="background:#facc15;border-radius:50%"></span>current sidebar design</span>
-              </div>
-              <div class="sec-label">Top candidates (click to load into sidebar)</div>
-              <div class="exp-candidates" id="exp-candidates"><div class="exp-empty">Set your requirements and click Compute.</div></div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- RIGHT PANEL: 3D Tube (top) + Energy (bottom) -->
-    <div class="right-panel" id="rightPanel">
-      <div class="right-panel-resize" id="rightPanelResize"></div>
-
-      <!-- 3D Tube sub-panel -->
-      <div class="sub-panel" id="sp3d">
-        <div class="sub-panel-header">
-          <button class="sub-toggle" id="btn-tog-3d" onclick="toggleSubPanel('3d')">▼</button>
-          <span class="sub-panel-title">3D Tube</span>
-          <button class="sub-expand" id="anim-btn" onclick="toggleAutoRotate()" title="Auto-rotate [A]">↻</button>
-          <div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0;margin:0 3px">
-            <span style="font-size:9px;color:var(--text3);white-space:nowrap;font-family:'JetBrains Mono',monospace">Cmpr</span>
-            <input type="range" id="r-compress" min="0" max="95" step="1" value="0" style="flex:1;min-width:0;height:3px;accent-color:var(--accent)">
-            <input class="num-inp" id="n-compress" type="number" min="0" max="95" step="1" value="0" style="width:32px;font-size:10px;padding:1px 2px">
-          </div>
-          <button class="sub-expand" id="compress-anim-btn" onclick="toggleCompressAnimate()" title="Auto-animate compression [C]">≋</button>
-          <button class="sub-expand" id="btn-exp-3d" onclick="expandSubPanel('3d')" title="Fullscreen">⛶</button>
-        </div>
-        <div class="sub-canvas-wrap" id="wrap3d">
-          <canvas id="canvas3d"></canvas>
-        </div>
-      </div>
-
-      <!-- Energy sub-panel -->
-      <div class="sub-panel" id="spEnergy">
-        <div class="sub-panel-header">
-          <button class="sub-toggle" id="btn-tog-energy" onclick="toggleSubPanel('energy')">▼</button>
-          <span class="sub-panel-title">Energy graph</span>
-          <button class="sub-expand" id="btn-exp-energy" onclick="expandSubPanel('energy')" title="Fullscreen">⛶</button>
-        </div>
-        <div class="sub-canvas-wrap" id="wrapEnergy">
-          <canvas id="canvasEnergy"></canvas>
-        </div>
-      </div>
-
-      <!-- Crease stiffness sub-panel -->
-      <div class="sub-panel collapsed" id="spStiffness">
-        <div class="sub-panel-header" title="L and w held fixed at the current geometry (n, floors, angle, etc.) while thickness is swept. k scales with thickness cubed and with crease length.">
-          <button class="sub-toggle" id="btn-tog-stiffness" onclick="toggleSubPanel('stiffness')">▶</button>
-          <span class="sub-panel-title">Crease stiffness (k vs thickness)</span>
-          <button class="sub-expand" id="btn-exp-stiffness" onclick="expandSubPanel('stiffness')" title="Fullscreen">⛶</button>
-        </div>
-        <div class="sub-canvas-wrap" id="wrapStiffness">
-          <canvas id="canvasStiffness"></canvas>
-        </div>
-      </div>
-
-      <!-- Modal frequencies sub-panel -->
-      <div class="sub-panel collapsed" id="spModal">
-        <div class="sub-panel-header" title="6-DOF linearized truss model (Kidambi & Wang 2020): axial vs. off-axis vibration modes of the two stable branches, swept over the stress-free twist angle δ0 at the current n, R0. See Sources for the full model.">
-          <button class="sub-toggle" id="btn-tog-modal" onclick="toggleSubPanel('modal')">▶</button>
-          <span class="sub-panel-title">Modal frequencies (axial / off-axis)</span>
-          <button class="sub-expand" id="btn-exp-modal" onclick="expandSubPanel('modal')" title="Fullscreen">⛶</button>
-        </div>
-        <div class="sub-canvas-wrap" id="wrapModal">
-          <canvas id="canvasModal"></canvas>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="actions">
-    <button class="primary" onclick="exportSVG()">⬇ SVG</button>
-    <button onclick="exportPNGA4()">⬇ PNG (A4)</button>
-    <button onclick="exportPDF()">⬇ PDF (print)</button>
-    <button onclick="exportDXF()">⬇ DXF</button>
-    <button onclick="exportSTL()">⬇ STL (tube)</button>
-    <button onclick="exportMoldSTL('mountain')">⬇ STL (mountain mold)</button>
-    <button onclick="exportMoldSTL('valley')">⬇ STL (valley mold)</button>
-    <div class="sep"></div>
-    <button onclick="autoFitA4()">↔ Auto-fit A4</button>
-    <button onclick="undo()" title="Undo (Ctrl+Z)">↩ Undo</button>
-    <button onclick="redo()" title="Redo (Ctrl+Y)">↪ Redo</button>
-    <button onclick="resetDefaults()">↺ Reset</button>
-  </div>
-  <div id="toast" class="toast"></div>
-  <input type="file" id="preset-file-input" accept=".json" style="display:none" onchange="handlePresetFile(this)">
-
-  <div id="sourcesModal" class="modal-overlay" onclick="if(event.target===this)toggleSourcesModal(false)">
-    <div class="modal-box">
-      <div class="modal-header">
-        <span class="modal-title">Sources &amp; references</span>
-        <button class="modal-close" onclick="toggleSourcesModal(false)" title="Close [Esc]">✕</button>
-      </div>
-      <div class="modal-body" id="sourcesBody"></div>
-    </div>
-  </div>
-
+  <section id="actions" aria-label="Export and print"></section>
 </div>
+
+<div id="toast-root" aria-live="polite"></div>
+
+<dialog id="sources" aria-labelledby="sources-title"></dialog>
+
+<noscript><p class="noscript">Kresling Studio runs in the browser and needs JavaScript. Enable it, or open dist/kresling.html from a local copy.</p></noscript>
 
 <script type="module" src="js/main.js"></script>
 </body>

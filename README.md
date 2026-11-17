@@ -1,99 +1,139 @@
-# Kresling Crease Generator
-
-A web app for designing and exporting Kresling origami crease patterns  the kind used for bistable, collapsible tubes and origami-inspired engineering structures. Pure vanilla HTML/CSS/JS, no build step, no external runtime dependencies. Everything renders with the Canvas 2D API.
+# Kresling Studio
 
 **Live app:** [kreslinggen.vercel.app](https://kreslinggen.vercel.app)
 
-## What it does
+Design Kresling origami tubes: an exact crease pattern you can print and fold, a 3-D
+preview that folds the way the paper does, a mechanics model of the snap (energy,
+force, vibration, buckling), a two-parameter design explorer, and fabrication files
+(PDF, SVG, PNG, DXF, STL tube, STL embossing plates, and a zip with all of them plus
+folding instructions).
 
-- Generates a physically accurate Kresling crease pattern from a few parameters: diameter, height, number of sides, floors, fold angle, chirality, and stacking.
-- Lays the pattern out for A4 printing, with auto-fit scaling, seam allowances, and extra registration columns.
-- Shows a live 3D preview of the folded tube (drag to rotate, scroll to zoom, slider to compress/animate).
-- Plots the fold-energy curve  with an optional force (dE/dh) overlay for the polyimide preset  to check and visualize bistability.
-- Sweeps crease stiffness vs. sheet thickness, and axial/off-axis modal frequencies vs. twist angle, for the two stable branches.
-- Runs a requirements-driven **Design Explorer**: pick two design axes (e.g. sides × angle), set requirements (must be bistable, must not buckle, must fit an A4 sheet), and scan a grid of candidate designs instead of hand-tuning one point at a time.
-- Checks buckling safety (Euler column + local shell buckling vs. snap-through force) for a given wall thickness and end condition.
-- Previews a two-part press mold (mountain + valley plates) for pre-creasing the pattern by hand or machine.
-- Exports to SVG, print-ready PDF, DXF, STL (tube), and STL (mountain/valley molds).
-- Supports undo/redo, preset save/load, and keyboard shortcuts.
+It replaces Kresling Crease Generator, the earlier app in this repository: the same
+sheet layout and feature set, rebuilt around exact rigid-panel geometry. The earlier app
+is still in the git history; its last version (v25) is commit fb4f988. Plain HTML/CSS/JS,
+no dependencies, no build tools beyond Node for the bundler and tests.
 
-## Project structure
+## Run it
+
+- **No server:** open `dist/kresling.html` in a browser. It is one self-contained file
+  (the source modules bundled), so it also works from disk.
+- **From source:** `node tools/serve.mjs` and open http://localhost:8765/, or use any static
+  file server (`npx serve .`). ES modules need http.
+- **Build the single file:** `node tools/build.mjs` writes `dist/kresling.html` and
+  `dist/artifact.html` (the same page without the document skeleton).
+- **Tests:** `node test/<name>.test.mjs` for `core`, `pattern`, `tube`, `mechanics`,
+  `physics`, `export`. `node tools/make-samples.mjs` writes every preset's exports to
+  `samples/` and prints a summary table.
+
+## How it works
+
+**Geometry** (`js/core/kresling.js`). A floor joins two regular n-gons of circumradius R;
+the top one is raised by H and twisted by φ. The flat strip has polygon side
+a = 2R·sin(π/n) (the chord, not the arc), height h and shift s; its long and short diagonals
+have lengths b² = s² + h² and c² = (s − a)² + h². Folding without stretching requires
+b² = H² + 4R²sin²(φ/2) and c² = H² + 4R²sin²((φ − 2π/n)/2), which gives
+sin(φ − π/n) = (2s − a)/(2R): exactly two rigid states whose twists add up to π + 2π/n
+(Guest & Pellegrino 1994). The app solves these in closed form, so a design can be given
+either as the two stable floor heights you want, or as the flat strip (height and crease angle).
+
+**Mountain and valley** come from the dihedral angles of the real folded shape. With
+the printed side outside: polygon rings and short diagonals are mountain folds, long
+diagonals are valley folds (classic regime, crease angle above 90°).
+
+**Pattern** (`js/core/pattern.js`): alternating or same-handed floors, a true mirror for
+left-handed tubes, and the sheet layout of the earlier Kresling Crease Generator: a straight
+seam with glue strips on both sides (whole panels, or widths in mm) that carry copies of the
+creases they are glued over, and plain end rings across the top and bottom of the sheet
+(set separately, 0–60 mm each, 10 mm by default).
+The sheet holds the whole tube: floors × stack count floors in one piece, as the original
+draws it. Patterns that do not fit the page are tiled across several pages with 10 mm
+overlap. When no pattern page has room for the legend and scale bar (a tiled print, or a
+sheet that nearly fills its page), the PDF ends with a legend page.
+
+**Print scale.** The printed sheet, the DXF and the press molds all follow the print
+scale, so they stay one size; the 3-D printed tube (STL) stays at design size. The mold
+plates carry a low border along the sheet outline for lining the sheet up, and their
+ridge width is limited to 0.9 × the gap between neighbouring creases.
+
+**Presets from Kresling Crease Generator.** Open reads the preset files the earlier app exports and
+converts them (cm to mm, arc side to chord, entered angle to drawn angle) so that every
+crease lands where that app prints it. Presets that have no rigid fold open too, but this
+app draws no pattern for them and says why.
+
+**Mechanics** (`js/physics/`). Each panel is a constant-strain triangle (plane-stress
+St Venant–Kirchhoff, strain recovered exactly from its three side lengths). By default
+panels are *thin*: compression beyond the plate-buckling strain kπ²t²/(12(1−ν²)w²) is
+carried at constant stress, the way paper and film wrinkle. Creases are torsion springs
+k = E·t³/(12(1−ν²)·w) per unit length (Filipov et al. 2015) with an adjustable rest
+position between the deployed and folded shapes. The energy path relaxes the twist at
+each height (ends free to rotate) and reports the wells, barrier, snap and release
+forces, and peak panel strain against the sheet's limit. Vibration uses one floor with a
+rigid top ring and payload, 6 degrees of freedom (in the style of Kidambi & Wang 2020).
+Buckling fits a Timoshenko column to the lateral stiffness of one floor and compares the
+Euler/Engesser load of the stack with the snap force.
+
+Limits: rings are rigid polygons, deformation is symmetric, and interior rings are
+treated like rigid plates for buckling (so that load is an upper bound). Forces are
+idealised; real creases vary with how sharply they are scored.
+
+## Compared with Kresling Crease Generator v24
+
+| | Kresling Crease Generator v24 | Kresling Studio |
+|---|---|---|
+| Polygon side | arc length πD/n (true tube 2.6–7 % wider than entered) | chord 2R·sin(π/n) |
+| Stable states | criterion 1 < red/side < 1/sin(π/n) | both rigid states solved exactly |
+| Ring folds | drawn as valley | mountain (from the folded shape) |
+| Left-handed | switches the green diagonal (changes crease lengths) | true mirror image |
+| 3-D view | flat strip height used as folded height | exact folded shape, same crease lengths as the print |
+| Energy model | dihedral bending along an assumed path | panel stretch + buckling + crease hinges, relaxed twist |
+| PDF | print dialog of an HTML page | real vector PDF, tiled across pages when needed |
+| Stack count | floors × stack on one sheet | the same |
+| Scale | sheet, DXF and molds | the same (the tube STL stays at design size) |
+
+v25, the last version of that app (commit fb4f988), already takes the stable states from the
+exact two-state solution, shows the true diameter, and draws the 3-D view and the energy curve
+along the exact fold path; its creases, ring folds and left-handed pattern are as in v24.
+
+Checking its presets with the exact solver: "Bistable n=6", "Monostable" and
+"Compact unit" have no strain-free folded shape at all (for "Bistable n=6" the shift
+exceeds the limit by 1.2 %), and "Bistable n=8" and "Tall tower" have a single stable state.
+
+## Project layout
 
 ```
-index.html              markup only, loads js/main.js as an ES module
-
-css/
-  base.css              @import font, * reset, :root custom properties, html/body/.app base rules
-  toolbar.css           top toolbar (title, tab buttons, shortcut hint, badge, GitHub link)
-  sidebar.css           left-panel form controls (sliders, number inputs, selects, checkboxes)
-  main-panels.css       main 3-column layout, flat-canvas area, stats bar, center tab bar, right panel + sub-panels
-  explorer.css          Design Explorer pane (.exp-*)
-  modal.css             Sources modal
-  misc.css              toast notification, bottom action bar
-  responsive.css        mobile/tablet + narrow-phone breakpoints (loaded last so it overrides everything above)
-
-js/
-  main.js               entry point: wires up globals + boots the app
-  constants.js          A4 dimensions, parameter pairs, preset definitions, cited SOURCES
-  state.js              shared mutable state (3D/mold cameras, UI tabs, anim)
-  ui.js                 DOM readers, toast, debounce, stats bar, info-box text
-  presets.js            preset load / import / export
-  history.js            undo / redo
-  exports.js            SVG / PNG / PDF / DXF / STL exporters
-  explorer.js           Design Explorer: requirements-driven grid search over design axes
-  app.js                event binding, tab switching, shortcuts, resize handles
-
-  physics/
-    geometry.js         computeGeometry, patternBounds, buildVerts
-                          (single source of truth for crease-pattern vertices)
-    material.js         sheet material constants + crease spring stiffness (k_m, k_v)
-    energy.js           fold-energy graph (dihedral-bending model) + hover
-    modal.js            axial/off-axis modal-frequency sweep (6-DOF truss model)
-    stiffness.js        crease stiffness (k) vs. thickness sweep
-    buckling.js         Euler column + local shell buckling vs. snap-through check
-
-  render/
-    render-flat.js      flat crease-pattern canvas + pan/zoom/hover
-    render-3d.js        3D tube preview
-    render-mold.js      press-mold preview
-
-test/
-  regression.mjs        regression suite (geometry, material, modal, exports,
-                          buckling, explorer, history)  run with `node test/regression.mjs`
-  _mold_probe.mjs       standalone probe script for mold-STL geometry
+index.html              page shell (loads css/*.css and js/main.js)
+css/                    app.css (tokens, layout, shared components), flat, view3d, panels, explorer
+js/main.js              boot: store, views, tabs, shortcuts
+js/app/                 store (params + undo/redo + view state), util
+js/core/                kresling (geometry), params (schema, presets, materials), design,
+                        pattern, layout (page placement, tiling), tube (3-D mesh), mold, info
+js/physics/             mechanics (CST + hinge energy), analysis (energy path), modal,
+                        buckling, sweeps (thickness), explore (explorer evaluation)
+js/render/              flat (pattern view), view3d, moldview, camera, chart
+js/ui/                  controls (sidebar), toolbar, actions (exports), panels (analysis),
+                        explorer, sources (help dialog), shortcuts, toast, theme
+js/export/              svg, pdf, png, dxf, stl, json, zip, save
+tools/                  build.mjs (bundler), serve.mjs (dev server), make-samples.mjs
+test/                   node tests (harness.mjs)
+dist/kresling.html      the whole app in one file (node tools/build.mjs)
+docs/CONTRACT.md        module contract the code follows
 ```
 
-The JS is split by concern rather than kept as one file: each module owns one piece (geometry, a physics model, a renderer, exports, etc.), and there's a single shared `buildVerts`/`patternBounds` in `physics/geometry.js` that every renderer, exporter, and physics model calls into, instead of each one re-deriving crease-pattern vertices independently. `physics/energy.js` and `physics/modal.js` are intentionally *independent* models of the same structure (arc-length dihedral-bending vs. exact-chord axial-truss) rather than one reused elsewhere  see the Sources modal for why. Physics models live under `js/physics/` and canvas renderers under `js/render/`; app-level orchestration (state, UI wiring, presets, history, exports, the Design Explorer, and `app.js`/`main.js` themselves) stays at the `js/` root. The CSS is split the same way, one file per UI area, loaded in `index.html` in the cascade order shown above.
+## References
 
-## Geometry & physics
+- Guest & Pellegrino (1994), The folding of triangulated cylinders, Part I. J. Appl. Mech. 61(4) 773–777. doi:10.1115/1.2901553
+- Cai, Deng, Zhou, Feng & Tu (2015), Bistable behavior of the cylindrical origami structure with Kresling pattern. J. Mech. Des. 137(6) 061406. doi:10.1115/1.4030158
+- Reid, Lechenault, Rica & Adda-Bedia (2017), Geometry and design of origami bellows with tunable response. Phys. Rev. E 95 013002. doi:10.1103/PhysRevE.95.013002
+- Kidambi & Wang (2020), Dynamics of Kresling origami deployment. Phys. Rev. E 101 063003. doi:10.1103/PhysRevE.101.063003
+- Filipov, Tachi & Paulino (2015), Origami tubes assembled into stiff, yet reconfigurable structures and metamaterials. PNAS 112(40) 12321–12326. doi:10.1073/pnas.1509465112
+- Filipov, Liu, Tachi, Schenk & Paulino (2017), Bar and hinge models for scalable analysis of origami. Int. J. Solids Struct. 124 26–45. doi:10.1016/j.ijsolstr.2017.05.028
+- Schenk & Guest (2011), Origami folding: a structural engineering approach. Origami 5, 291–304. doi:10.1201/b10971-27
+- Timoshenko & Gere (1961), Theory of Elastic Stability, McGraw-Hill.
+- DuPont Kapton HN technical data sheet.
 
-Crease geometry and the physics models follow formulas from:
+## License
 
-- **Alipour & Arghavani (2023)**  exact 3D crease lengths, polygon side length, and the designed-state scan used by `physics/geometry.js`
-- **Guest & Pellegrino (1994)**  exact rigid folding: each floor of the drawn pattern folds into exactly two strain-free shapes or none. `physics/geometry.js` (`exactFold`) solves sin(ψ ± π/n) = (2ρ ± b)/(2R) for the pattern as drawn and uses it for the Bistable flag, the Extend/Fold lengths, the folded inner and true diameters, the 3D view and the ⚡ Bistable / ⚖ Monostable buttons. None of this changes the crease pattern.
-- **Cai et al. (2015)**  length-ratio criterion `1 < red_len/side < 1/sin(π/n)`, still shown in the Bistable tooltip for reference; it disagrees with the exact solution for this zig-zag pattern, so it no longer decides bistability
-- **Masana & Daqaq (2019)**  physical framing (strain energy vs. deployment height, multiple equilibria) motivating `physics/energy.js`'s energy-vs-height graph
-- **Schenk & Guest (2011)** and **Filipov, Tachi & Paulino, *PNAS* (2015)**  bar-and-hinge crease convention and the thin-plate torsional-hinge stiffness formula, `k_fold = E·t³·L / (12·(1−ν²)·w)`
-- **Kidambi & Wang (2020, *Physical Review E*)**  6-DOF truss model, mass/stiffness matrices, and the axial/off-axis modal-frequency analysis behind `physics/modal.js`, checked against their published Fig. 7/13 numbers
-- **DuPont™ Kapton® HN datasheet**  E ≈ 2.5 GPa, ν = 0.34, density 1.42 g/cc for the Polyimide (Kapton-type) preset
-
-`physics/buckling.js`'s Euler-column/local-shell-buckling check is standard shell theory, not itself one of the Kresling-specific sources above  it's a structural safety check layered on top of the cited geometry/material models, used by the buckling requirement in the Design Explorer.
-
-Full citations with DOIs are one click away via the **📖 Sources** button in the toolbar (`js/constants.js` → `SOURCES`, rendered by `js/ui.js` → `toggleSourcesModal`).
-
-## Running locally
-
-No build step required. Because the JS uses ES module `import`/`export`, it needs to be served over `http://` or `https://` rather than opened directly via `file://`  any static file server works, e.g.:
-
-```
-npx serve .
-```
-
-To check that geometry/material/physics/export changes haven't broken anything:
-
-```
-node test/regression.mjs
-```
+MIT, see [LICENSE](LICENSE).
 
 ---
 
@@ -102,6 +142,6 @@ node test/regression.mjs
 > A Kresling tube holds two stable equilibria and no others; it doesn't hover
 > in between. Every other configuration is transient, snapping toward one
 > resting state or the other the moment you let go, which happens to be
-> exactly what `js/physics/energy.js`'s energy curve plots.
+> exactly what the energy curve in `js/physics/analysis.js` plots.
 
 *(Vibecoded via Copilot in the beginning, now maintained by the lord Claude.)*

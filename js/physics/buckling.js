@@ -1,85 +1,87 @@
-import { MATERIALS } from './material.js';
-import { snapForce } from './foldpath.js';
-
-// ─── Structural check: does the tube buckle before it snaps? ────────────────
-// This module is deliberately NOT presented as being derived from the
-// Kresling-specific papers cited elsewhere in this app (Cai et al., Masana &
-// Daqaq, Kidambi & Wang) — none of those give a buckling criterion. It's a
-// standard textbook thin-shell/Euler-column check (Timoshenko & Gere,
-// "Theory of Elastic Stability") applied to the tube as a simplified
-// order-of-magnitude structural screen, not a substitute for physical
-// testing or a Kresling-specific buckling analysis.
+// Does the tube bow sideways before it snaps?
 //
-// Three quantities, all in Newtons, all requiring material==='polyimide'
-// (the generic material's k_m/k_v are unitless placeholders, so no real
-// force in Newtons can be derived from them):
+// One floor at its deployed equilibrium, bottom ring clamped and top ring
+// rigid, gives the 6x6 stiffness K of the top ring (modal.js). Its lateral-
+// rocking blocks are matched to a Timoshenko cantilever of length H:
+//   C = K_block^-1,  C = [[H^3/(3 EI) + H/GA, H^2/(2 EI)], [H^2/(2 EI), H/EI]]
+//   EI = H / C_rr,   GA = H / (C_uu - H^3/(3 EI))
+// averaged over the x-z plane (ux, ry) and the y-z plane (uy, -rx; rx turns z
+// toward -y). The whole stack is a column of length L = N x H with effective
+// length factor K (fixed-free 2, pinned 1, fixed-pinned 0.7, fixed-fixed 0.5):
+//   Pe = pi^2 EI / (K L)^2,   Pcr = Pe / (1 + Pe / GA)   (Engesser shear correction)
+// compared with the snap-through push from the energy path. Interior rings are
+// folds, not rigid plates, so a real stack is softer: Pcr is an upper bound.
 //
-//   Fsnap    quasi-static axial force needed to drive the tube through its
-//            snap: dE/dh peak along the exact fold path, the same curve
-//            energy.js draws (foldpath.js snapForce).
-//   Pglobal  Euler column-buckling load, treating the tube as a thin
-//            cylindrical shell strut: I = pi*R^3*t (thin-wall), Pcr =
-//            pi^2*E*I/Le^2.
-//   Plocal   classical local axial shell-buckling load (Timoshenko):
-//            sigma_cr = E*t / (R*sqrt(3*(1-nu^2))), Pcr = sigma_cr*2*pi*R*t.
-//
-// A design is "buckling-safe" if min(Pglobal,Plocal) exceeds Fsnap by at
-// least `safetyFactor` — i.e. the tube can actually be pushed through its
-// snap-through transition without the wall collapsing first.
+//   bucklingCheck(design) -> { ok, EI, GA, length, K, Pe, Pcr, snapP, safety,
+//       required, pass, endCond, H, coupling, notes[] }                  memoised
+//   bucklingFrom(design, energy) -> the same for an EnergyResult in hand
+//   K_FACTORS -> { endCond: K }
 
-const GPA_TO_PA = 1e9;
-const UM_TO_M   = 1e-6;
-const CM_TO_M   = 1e-2;
+import { energyAnalysis, floorModel, invalidResult, memoByParams } from './analysis.js';
+import { findEquilibrium, poseStiffness } from './modal.js';
 
-// Force needed to push the tube through its snap: the largest |dE/dh| along
-// the exact fold path the energy graph draws, between the two wells for a
-// bistable design or from deployed down to the 3-D view's pressed shape
-// otherwise (foldpath.js snapRange). Outside that range the curve steepens
-// towards the geometric limits, which nobody pushes the tube into.
-export function snapThroughForce(p, g) {
-  return snapForce(p, g, 160); // Newtons for polyimide
+export const K_FACTORS = { 'fixed-free': 2, pinned: 1, 'fixed-pinned': 0.7, 'fixed-fixed': 0.5 };
+
+const END_NOTE = {
+  'fixed-free': 'Bottom clamped, top free to sway: the weakest support.',
+  pinned: 'Both ends held on the axis but free to tilt.',
+  'fixed-pinned': 'Bottom clamped, top held on the axis.',
+  'fixed-fixed': 'Both ends clamped square: the stiffest support.',
+};
+
+function planeFit(K, u, r, sgn, H) {
+  const kuu = K[u][u], kur = sgn * K[u][r], krr = K[r][r];
+  const det = kuu * krr - kur * kur;
+  if (!(det > 0) || !(kuu > 0) || !(krr > 0)) return null;
+  const cuu = krr / det, cur = -kur / det, crr = kuu / det;
+  const EI = H / crr;
+  const bendOnly = (H * H * H) / (3 * EI);
+  const shear = cuu - bendOnly;
+  const GA = shear > 1e-9 * cuu ? H / shear : Infinity;
+  // how far the truss coupling is from a beam's H^2/(2 EI): 0 = beam-like
+  const coupling = Math.abs(cur - (H * H) / (2 * EI)) / ((H * H) / (2 * EI));
+  return { EI, GA, coupling };
 }
 
-export function eulerColumnBuckling(p, g, endCondition = 'pinned') {
-  if (p.material !== 'polyimide') return null;
-  if (!(g.R > 0) || !(p.height > 0)) return null;
-  const { E_GPa } = MATERIALS.polyimide;
-  const E  = E_GPa * GPA_TO_PA;
-  const t  = (p.thicknessUm || 50) * UM_TO_M;
-  const R  = g.R * CM_TO_M;
-  const L  = p.height * CM_TO_M;
-  const Le = endCondition === 'fixed-free' ? 2 * L : L; // pinned-pinned : cantilever
-  const I  = Math.PI * R ** 3 * t; // thin cylindrical shell, second moment of area
-  return (Math.PI ** 2 * E * I) / (Le ** 2); // Newtons
+export function bucklingFrom(design, energy) {
+  const bad = invalidResult(design);
+  if (bad) return bad;
+  try {
+    const p = design.params;
+    const model = floorModel(design);
+    const dep = design.states.deployed;
+    const eq = findEquilibrium(model, dep.H, dep.phi);
+    if (eq.contact || !(eq.H > 0)) return { ok: false, reason: 'The deployed floor has no free equilibrium height.' };
+    const K = poseStiffness(model, eq.H, eq.phi);
+    const fits = [planeFit(K, 0, 4, +1, eq.H), planeFit(K, 1, 3, -1, eq.H)].filter(Boolean);
+    if (!fits.length) return { ok: false, reason: 'The floor has no lateral stiffness here.' };
+    const EI = fits.reduce((s, f) => s + f.EI, 0) / fits.length;
+    const GAs = fits.map((f) => f.GA);
+    const GA = GAs.every((g) => Number.isFinite(g)) ? GAs.reduce((s, g) => s + g, 0) / GAs.length : Infinity;
+    const coupling = fits.reduce((s, f) => s + f.coupling, 0) / fits.length;
+
+    const Kf = K_FACTORS[p.endCond] ?? 2;
+    const length = design.totalFloors * eq.H;
+    const Pe = (Math.PI * Math.PI * EI) / ((Kf * length) ** 2);
+    const Pcr = Number.isFinite(GA) ? Pe / (1 + Pe / GA) : Pe;
+    const snapP = energy && energy.ok && energy.bistable && energy.snapForce ? energy.snapForce.P : null;
+    const safety = snapP && snapP > 0 ? Pcr / snapP : null;
+    const notes = [END_NOTE[p.endCond] || ''];
+    if (Number.isFinite(GA) && Pe / GA > 0.25) notes.push('Shear in the folded wall cuts the buckling load noticeably.');
+    if (coupling > 0.25) notes.push('One floor bends unlike a slender beam here, so treat the column result as rough.');
+    notes.push('Interior rings are folds rather than rigid plates, so a real stack is softer than this: read Pcr as an upper bound.');
+    if (snapP === null) notes.push('There is no snap-through to compare against: the design has a single stable state.');
+    return {
+      ok: true, EI, GA, length, K: Kf, Pe, Pcr, snapP, safety,
+      required: p.safety, pass: safety === null ? null : safety >= p.safety,
+      endCond: p.endCond, H: eq.H, coupling, notes: notes.filter(Boolean),
+    };
+  } catch (e) {
+    return { ok: false, reason: `The buckling check failed for this design (${e && e.message ? e.message : e}).` };
+  }
 }
 
-export function shellLocalBuckling(p, g) {
-  if (p.material !== 'polyimide') return null;
-  if (!(g.R > 0)) return null;
-  const { E_GPa, nu } = MATERIALS.polyimide;
-  const E = E_GPa * GPA_TO_PA;
-  const t = (p.thicknessUm || 50) * UM_TO_M;
-  const R = g.R * CM_TO_M;
-  const sigma_cr = (E * t) / (R * Math.sqrt(3 * (1 - nu * nu)));
-  return sigma_cr * 2 * Math.PI * R * t; // Newtons
-}
-
-// Combined verdict. Returns { available:false } when material isn't
-// polyimide (no real Newtons to compare). safetyFactor is the minimum
-// acceptable Pcr/Fsnap ratio — 1.0 means "just barely doesn't buckle
-// first", values above 1 build in margin against manufacturing variance.
-export function bucklingCheck(p, g, safetyFactor = 1.5, endCondition = 'pinned') {
-  const Fsnap   = snapThroughForce(p, g);
-  const Pglobal = eulerColumnBuckling(p, g, endCondition);
-  const Plocal  = shellLocalBuckling(p, g);
-  if (Fsnap === null || Pglobal === null || Plocal === null) return { available: false };
-  const Pcr = Math.min(Pglobal, Plocal);
-  const margin = Fsnap > 0 ? Pcr / Fsnap : Infinity;
-  return {
-    available: true,
-    Fsnap, Pglobal, Plocal, Pcr,
-    limitingMode: Pglobal <= Plocal ? 'global (Euler column)' : 'local (shell)',
-    margin,
-    safe: margin >= safetyFactor,
-  };
-}
+export const bucklingCheck = memoByParams((design) => {
+  const bad = invalidResult(design);
+  return bad || bucklingFrom(design, energyAnalysis(design));
+});

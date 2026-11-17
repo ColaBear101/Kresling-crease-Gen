@@ -1,363 +1,385 @@
-import { getP } from '../ui.js';
-import { computeGeometry } from './geometry.js';
-
-// ─── Kidambi, N., & Wang, K. W. (2020). Dynamics of Kresling origami
-// deployment. Physical Review E, 101(6), 063003. ────────────────────────────
-// Reproduces Fig. 13(b): modal frequencies of the axial and off-axis
-// vibration modes of a single Kresling module at its two stable branches,
-// swept over the stress-free twist angle δ0, for the current n and R0.
+// Small vibrations of one floor carrying the top mass: a 6-DOF top-ring model
+// in the style of Kidambi & Wang (2020), with the CST + hinge energy.
 //
-// Model (their Sec. II & V-B): rigid n-gon top/bottom panels of circumradius
-// R0 (nondimensionalised by the stress-free height h0), joined by n "vertical"
-// (mountain) trusses of natural length a0 and n "diagonal" (valley) trusses
-// of natural length b0, linear-elastic with unit stiffness (ka=kb=1, i.e.
-// rk=1). State x=[pB1,pB2,pB3,γ,β,α] is the position + 3-2-1 Euler angles of
-// the top panel relative to the fixed bottom panel. Mass matrix M=diag(mB·I3,
-// IB0) with mB=(ρ/ρ0)πR0² and IB0=(ρ/4ρ0)πR0⁴·diag(1,1,2); using their
-// dynamics-section default ρ/ρ0=1/(πR0²) gives mB=1, IB0=diag(R0²/4,R0²/4,R0²/2)
-// — and because the two transverse principal moments are equal (I1=I2), this
-// mass matrix is *exact* in Euler-angle-rate coordinates at any equilibrium
-// with β=α=0 (true for both branches here), not just a small-angle approximation.
+// Bottom ring clamped, top ring rigid. Each stable state is the true
+// equilibrium: the relaxed energy E*(H) = min over phi of floorEnergy is
+// minimised from the energy-path well (or the rigid state), so hinge prestress
+// is included. Stiffness K = hessian6 of makePoseEnergy there, plus the
+// ring-crease hinge term of floorEnergy as a function of (uz, rz), so the
+// axial-torsional block matches the energy landscape. When a panel sits at its
+// buckling strain (a corner of the energy) K is the unbuckled-side tangent,
+// and K is averaged over the n rotations of the ring (exact n-fold symmetry).
+// Mass: params.payload as a thin disc of radius R plus half of one floor's
+// sheet as a thin ring, both in the top-ring plane: M = diag(m, m, m, Ixy, Ixy, Iz).
+// K and M go to SI (N/m, N/rad, N*m/rad; kg, kg*m^2) and the eigenproblem is
+// solved mass-normalised: M^-1/2 K M^-1/2 psi = w^2 psi, f = w / 2pi.
+// Participation = share of psi in uz (axial), rz (torsion), ux+uy (lateral),
+// rx+ry (rocking); lateral/rocking modes come in degenerate pairs. A flat state
+// held by contact (H = 0) has no free vibration and is left out with a note.
+// "deployed" is the tallest stable state, "folded" a second, lower one.
 //
-// This module numerically differentiates the truss strain energy (rather than
-// the analytic force/torque expressions in their Eqs. 11-12/18) to build the
-// stiffness matrix — physically equivalent, and avoids re-deriving those
-// per-truss force formulas by hand. Natural frequencies come from a
-// hand-rolled cyclic Jacobi eigensolver (mass-normalised, so it's a plain
-// symmetric eigenproblem) since no linear-algebra library is loaded here.
+//   modalAnalysis(design) -> { ok, mass {top, ring, m, Iz, Ixy}, states:
+//       [{ key, H, phi, E, stable, modes: [{ f, kind, participation }] }], notes }   memoised
+//   modalSweep(design, { samples = 41 }) -> { ok, xLabel, x[], current, series }   memoised
+//       n, R and strip height h fixed; the crease angle runs over the range
+//       where a deployed state exists; x = rigid deployed twist (deg)
+//   findEquilibrium(model, H, phi, { step }) -> { H, phi, E, contact }
+//   poseStiffness(model, H, phi, { raw }) -> 6x6 K about the top-ring centre
+//       (N/mm, N/rad, N*mm/rad; q = [ux, uy, uz, rx, ry, rz]); raw: no averaging
+//   symmetricStiffness(model, H, phi) -> { HH (N/mm), Hp (N/rad), pp (N*mm/rad^2) }
+//   modalMass(design) -> { top, ring, m (kg), Iz, Ixy (kg*m^2) }
+//   modesOf(K, mass) -> 6 modes { f (Hz), kind, participation }, ascending
+//   floorStates(model, seeds, scale) -> { states, notes }: free equilibria from seeds
+//   deployedTwistRange(n, R, h, phiNow) -> { lo, hi } (rad) | null
 
-// ─── Small 3-vector / 3x3-matrix helpers ─────────────────────────────────────
-const vAdd = (a, b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
-const vSub = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
-const vLen = a => Math.hypot(a[0], a[1], a[2]);
-function matMul3(A, B) {
-  const C = [[0,0,0],[0,0,0],[0,0,0]];
-  for (let i=0;i<3;i++) for (let j=0;j<3;j++) { let s=0; for (let k=0;k<3;k++) s += A[i][k]*B[k][j]; C[i][j]=s; }
-  return C;
-}
-function matVec3(A, v) {
-  return [A[0][0]*v[0]+A[0][1]*v[1]+A[0][2]*v[2],
-          A[1][0]*v[0]+A[1][1]*v[1]+A[1][2]*v[2],
-          A[2][0]*v[0]+A[2][1]*v[1]+A[2][2]*v[2]];
-}
-// 3-2-1 Euler rotation tensor R = R1(γ)·R2(β)·R3(α), Eqs. (2)-(3).
-function rot321(gamma, beta, alpha) {
-  const cg=Math.cos(gamma), sg=Math.sin(gamma);
-  const cb=Math.cos(beta),  sb=Math.sin(beta);
-  const ca=Math.cos(alpha), sa=Math.sin(alpha);
-  const R1=[[cg,-sg,0],[sg,cg,0],[0,0,1]];
-  const R2=[[cb,0,sb],[0,1,0],[-sb,0,cb]];
-  const R3=[[1,0,0],[0,ca,-sa],[0,sa,ca]];
-  return matMul3(matMul3(R1,R2),R3);
-}
+import {
+  floorEnergy, makeFloorModel, makePoseEnergy, makeCST, hessian6, jacobiEigen, foldAnglesSym, wrapAngle,
+} from './mechanics.js';
+import { energyAnalysis, floorModel, invalidResult, memoByParams, peakPanelStrain } from './analysis.js';
+import { rigidStates, TAU } from '../core/kresling.js';
 
-// ─── Truss geometry & strain energy (Eqs. 4-9, nondimensional, h0=1) ────────
-function nodeA(i, n, R0) { const t=2*Math.PI*i/n; return [R0*Math.cos(t), R0*Math.sin(t), 0]; }
-function nodeBBody(i, n, R0, delta0) { const t=2*Math.PI*i/n + delta0; return [R0*Math.cos(t), R0*Math.sin(t), 0]; }
+const DEG = 180 / Math.PI;
+const GOLD = (Math.sqrt(5) - 1) / 2;
+const AXIAL_KINDS = new Set(['axial', 'torsional', 'axial-torsional']);
 
-function naturalLengths(n, R0, delta0) {
-  const A0=nodeA(0,n,R0), B0=vAdd(nodeBBody(0,n,R0,delta0),[0,0,1]);
-  const B1=vAdd(nodeBBody(1,n,R0,delta0),[0,0,1]);
-  return { a0: vLen(vSub(B0,A0)), b0: vLen(vSub(B1,A0)) };
-}
-
-function strainEnergy(x, n, R0, delta0, a0, b0) {
-  const [pB1,pB2,pB3,gamma,beta,alpha] = x;
-  const R = rot321(gamma,beta,alpha);
-  const p = [pB1,pB2,pB3];
-  let E = 0;
-  for (let i=0;i<n;i++) {
-    const Ai  = nodeA(i,n,R0);
-    const Bi  = vAdd(p, matVec3(R, nodeBBody(i,n,R0,delta0)));
-    const Bi1 = vAdd(p, matVec3(R, nodeBBody((i+1)%n,n,R0,delta0)));
-    const La = vLen(vSub(Bi,Ai));
-    const Lb = vLen(vSub(Bi1,Ai));
-    E += 0.5*(La-a0)**2 + 0.5*(Lb-b0)**2;
+/** Twist minimising floorEnergy at height H near phiC; follows the valley if it leaves the window. */
+function relaxLocal(model, H, phiC, w = 0.3) {
+  const E = (p) => floorEnergy(model, H, p).total;
+  let lo = phiC - w, hi = phiC + w;
+  for (let pass = 0; ; pass++) {
+    const N = 8, step = (hi - lo) / N;
+    let best = 0, bestE = Infinity;
+    for (let k = 0; k <= N; k++) { const e = E(lo + k * step); if (e < bestE) { bestE = e; best = k; } }
+    const c = lo + best * step;
+    if ((best === 0 || best === N) && pass < 4) { lo = c - w; hi = c + w; continue; }
+    let a = c - step, b = c + step;
+    let x1 = b - GOLD * (b - a), x2 = a + GOLD * (b - a), f1 = E(x1), f2 = E(x2);
+    for (let k = 0; k < 26; k++) {
+      if (f1 < f2) { b = x2; x2 = x1; f2 = f1; x1 = b - GOLD * (b - a); f1 = E(x1); }
+      else { a = x1; x1 = x2; f1 = f2; x2 = a + GOLD * (b - a); f2 = E(x2); }
+    }
+    const r = f1 < f2 ? { phi: x1, E: f1 } : { phi: x2, E: f2 };
+    return r.E <= bestE ? r : { phi: c, E: bestE };
   }
-  return E;
 }
 
-// ─── Minimum-energy axial deployment path (analogue of their Fig. 5/6) ─────
-// Off-axis DOF (pB1,pB2,β,α) are zero on this path by symmetry; γ is the
-// only DOF coupled to pB3, so a 1-D minimisation over γ is exact.
-function energyAxial(pB3, gamma, n, R0, delta0, a0, b0) {
-  return strainEnergy([0,0,pB3,gamma,0,0], n, R0, delta0, a0, b0);
-}
-function minimizeGamma(pB3, n, R0, delta0, a0, b0) {
-  const GRID = 20;
-  let bestG = 0, bestE = Infinity;
-  for (let k=0;k<=GRID;k++) {
-    const gm = -Math.PI + 2*Math.PI*k/GRID;
-    const E = energyAxial(pB3, gm, n,R0,delta0,a0,b0);
-    if (E < bestE) { bestE = E; bestG = gm; }
+/**
+ * Stable equilibrium near (H, phi): walk downhill on the relaxed energy E*(H)
+ * until it rises, then golden-section search; H stays in [0, 2 H]. contact =
+ * true when the floor ends pressed flat (H = 0). step: first walking step (mm).
+ */
+export function findEquilibrium(model, H, phi, { step } = {}) {
+  const scale = Math.max(H, 0.05 * model.R, 1e-6);
+  const Hcap = 2 * scale;
+  let phiRun = phi;
+  const Estar = (h) => { const r = relaxLocal(model, h, phiRun); phiRun = r.phi; return r.E; };
+  let d = step > 0 ? step : 0.005 * scale;
+  const H0 = Math.min(Hcap, Math.max(0, H));
+  const f0 = Estar(H0);
+  const fUp = Estar(H0 + d);
+  const fDn = H0 - d >= 0 ? Estar(H0 - d) : Infinity;
+  let a, c;
+  if (fUp >= f0 && fDn >= f0) { a = Math.max(0, H0 - d); c = H0 + d; }
+  else {
+    const dir = fUp < fDn ? 1 : -1;
+    let prev = H0, b = H0 + dir * d, fb = dir > 0 ? fUp : fDn;
+    for (;;) {
+      d *= 1.6;
+      let x = b + dir * d;
+      if (dir < 0 && x <= 0) x = 0;
+      if (dir > 0 && x >= Hcap) x = Hcap;
+      const fx = Estar(x);
+      if (fx >= fb) { a = Math.min(prev, x); c = Math.max(prev, x); break; }
+      if (x === 0 || x === Hcap) { a = c = x; break; }     // still falling at the boundary
+      prev = b; b = x; fb = fx;
+    }
   }
-  const step = 2*Math.PI/GRID;
-  let lo = bestG - step, hi = bestG + step;
-  const gr = (Math.sqrt(5)-1)/2;
-  let c = hi-gr*(hi-lo), d = lo+gr*(hi-lo);
-  let fc = energyAxial(pB3,c,n,R0,delta0,a0,b0), fd = energyAxial(pB3,d,n,R0,delta0,a0,b0);
-  for (let it=0; it<20; it++) {
-    if (fc < fd) { hi=d; d=c; fd=fc; c=hi-gr*(hi-lo); fc=energyAxial(pB3,c,n,R0,delta0,a0,b0); }
-    else         { lo=c; c=d; fc=fd; d=lo+gr*(hi-lo); fd=energyAxial(pB3,d,n,R0,delta0,a0,b0); }
+  if (c > a) {
+    let x1 = c - GOLD * (c - a), x2 = a + GOLD * (c - a), f1 = Estar(x1), f2 = Estar(x2);
+    for (let k = 0; k < 30 && c - a > 1e-9 * scale; k++) {
+      if (f1 < f2) { c = x2; x2 = x1; f2 = f1; x1 = c - GOLD * (c - a); f1 = Estar(x1); }
+      else { a = x1; x1 = x2; f1 = f2; x2 = a + GOLD * (c - a); f2 = Estar(x2); }
+    }
+    a = c = f1 < f2 ? x1 : x2;
   }
-  const gEq = (lo+hi)/2;
-  return { gamma: gEq, E: energyAxial(pB3,gEq,n,R0,delta0,a0,b0) };
-}
-
-// Finds local energy minima along the pB3-axis (both stable branches).
-function findBranches(n, R0, delta0) {
-  const { a0, b0 } = naturalLengths(n, R0, delta0);
-  const STEPS = 70, PB3_MAX = 2.0;
-  const pts = [];
-  for (let i=0;i<=STEPS;i++) {
-    const pB3 = PB3_MAX * i / STEPS;
-    const { gamma, E } = minimizeGamma(pB3, n,R0,delta0,a0,b0);
-    pts.push({ pB3, gamma, E });
-  }
-  const WIN = 4;
-  const minima = [];
-  for (let i=WIN;i<pts.length-WIN;i++) {
-    let isMin = true;
-    for (let j=i-WIN;j<=i+WIN;j++) if (j!==i && pts[j].E <= pts[i].E) { isMin=false; break; }
-    if (isMin) minima.push(pts[i]);
-  }
-  if (pts[0].E < pts[WIN].E) minima.unshift(pts[0]);
-  if (pts[STEPS].E < pts[STEPS-WIN].E) minima.push(pts[STEPS]);
-  const merged = [];
-  let lastPb3 = -Infinity;
-  for (const m of minima) { if (Math.abs(m.pB3-lastPb3) > 0.04) { merged.push(m); lastPb3 = m.pB3; } }
-  return { a0, b0, minima: merged };
+  const r = relaxLocal(model, a, phiRun);
+  const contact = a <= 1e-4 * scale;
+  return { H: contact ? 0 : a, phi: r.phi, E: r.E, contact };
 }
 
-// ─── Numerical Hessian (stiffness matrix) + mass-normalised Jacobi eigensolve ─
-function hessian6(fn, x0, h = 1e-4) {
-  const H = Array.from({length:6},()=>new Array(6).fill(0));
-  const E0 = fn(x0);
-  for (let i=0;i<6;i++) {
-    const xp=x0.slice(); xp[i]+=h; const xm=x0.slice(); xm[i]-=h;
-    H[i][i] = (fn(xp) - 2*E0 + fn(xm)) / (h*h);
+/**
+ * Copy of the model for tangent stiffness at (H, phi), plus a finite-difference
+ * step (mm) that stays on one side of the panel-buckling corner. Away from the
+ * corner the Hessian does not depend on epsCr, so moving the corner just past
+ * the stencil gives the exact one-sided (unbuckled) tangent at a stuck corner.
+ */
+function stiffnessSetup(model, H, phi) {
+  const L = Math.min(model.a, model.b0, model.c0);
+  if (!model.epsCr) return { m: model, d: 1e-5 * model.R };
+  const band = 0.05 * model.epsCr;
+  const e1 = peakPanelStrain(model, H, phi);
+  const e2 = minPanelStrain(model, H, phi);
+  let m = model, gap = Math.abs(e2 + model.epsCr);
+  if (gap < band) {
+    const eps = Math.max(model.epsCr, -e2) + band;
+    m = { ...model, epsCr: eps, cst: makeCST([model.a, model.c0, model.b0], model.mat, eps) };
+    gap = Math.abs(e2 + eps);
   }
-  for (let i=0;i<6;i++) for (let j=i+1;j<6;j++) {
-    const xpp=x0.slice(); xpp[i]+=h; xpp[j]+=h;
-    const xpm=x0.slice(); xpm[i]+=h; xpm[j]-=h;
-    const xmp=x0.slice(); xmp[i]-=h; xmp[j]+=h;
-    const xmm=x0.slice(); xmm[i]-=h; xmm[j]-=h;
-    const v = (fn(xpp)-fn(xpm)-fn(xmp)+fn(xmm)) / (4*h*h);
-    H[i][j]=v; H[j][i]=v;
-  }
-  return H;
-}
-function massNormalize(H, M) {
-  const A = Array.from({length:6},()=>new Array(6).fill(0));
-  for (let i=0;i<6;i++) for (let j=0;j<6;j++) A[i][j] = H[i][j] / Math.sqrt(M[i]*M[j]);
-  return A;
-}
-// Cyclic Jacobi eigenvalue algorithm for a symmetric 6x6 matrix.
-function jacobiEigen(Ain, maxIter=120, tol=1e-13) {
-  const n = Ain.length;
-  const A = Ain.map(r=>r.slice());
-  const V = Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>i===j?1:0));
-  for (let iter=0; iter<maxIter; iter++) {
-    let p=0,q=1,max=0;
-    for (let i=0;i<n;i++) for (let j=i+1;j<n;j++) if (Math.abs(A[i][j])>max) { max=Math.abs(A[i][j]); p=i; q=j; }
-    if (max < tol) break;
-    const app=A[p][p], aqq=A[q][q], apq=A[p][q];
-    const phi = 0.5*Math.atan2(2*apq, aqq-app);
-    const c=Math.cos(phi), s=Math.sin(phi);
-    for (let k=0;k<n;k++) { const akp=A[k][p], akq=A[k][q]; A[k][p]=c*akp-s*akq; A[k][q]=s*akp+c*akq; }
-    for (let k=0;k<n;k++) { const apk=A[p][k], aqk=A[q][k]; A[p][k]=c*apk-s*aqk; A[q][k]=s*apk+c*aqk; }
-    for (let k=0;k<n;k++) { const vkp=V[k][p], vkq=V[k][q]; V[k][p]=c*vkp-s*vkq; V[k][q]=s*vkp+c*vkq; }
-  }
-  return { vals: Array.from({length:n},(_,i)=>A[i][i]), vecs: V };
+  gap = Math.min(gap, Math.abs(e1 + m.epsCr));
+  return { m, d: Math.min(1e-4 * model.R, 0.1 * gap * L) };
 }
 
-// Axial subspace = (pB3,γ) → indices 2,3. Off-axis = (pB1,pB2,β,α) → 0,1,4,5.
-function modesAt(x0, fn, M) {
-  const H = hessian6(fn, x0);
-  const A = massNormalize(H, M);
-  const { vals, vecs } = jacobiEigen(A);
-  const modes = vals.map((lambda, k) => {
-    const col = vecs.map(row => row[k]);
-    const axialE = col[2]**2 + col[3]**2;
-    const offE   = col[0]**2 + col[1]**2 + col[4]**2 + col[5]**2;
-    return { omega: Math.sqrt(Math.max(0, lambda)), type: axialE >= offE ? 'axial' : 'offaxis' };
-  });
-  modes.sort((a,b) => a.omega - b.omega);
+/** Smallest principal Green strain of the panels in the symmetric state (H, phi). */
+function minPanelStrain(model, H, phi) {
+  const { n, R, a } = model;
+  const sb = Math.sin(phi / 2), sc = Math.sin((phi - TAU / n) / 2);
+  const b = Math.sqrt(H * H + 4 * R * R * sb * sb);
+  const c = Math.sqrt(H * H + 4 * R * R * sc * sc);
+  const [gxx, gyy, gxy] = model.cst.strain([a, c, b]);
+  return (gxx + gyy) / 2 - Math.hypot((gxx - gyy) / 2, gxy);
+}
+
+function ringHinge(model, H, phi) {
+  if (!model.rest || !(model.kappa > 0)) return 0;
+  const f = foldAnglesSym(model, H, phi);
+  return 0.5 * model.kappa * model.n * model.a * wrapAngle(f.ring - model.rest.ring) ** 2;
+}
+
+function cyclicAverage(K, n) {
+  const out = Array.from({ length: 6 }, () => new Array(6).fill(0));
+  for (let j = 0; j < n; j++) {
+    const c = Math.cos((TAU * j) / n), s = Math.sin((TAU * j) / n);
+    const T = [[c, -s, 0, 0, 0, 0], [s, c, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], [0, 0, 0, c, -s, 0], [0, 0, 0, s, c, 0], [0, 0, 0, 0, 0, 1]];
+    for (let p = 0; p < 6; p++) {
+      for (let q = 0; q < 6; q++) {
+        let sum = 0;
+        for (let i = 0; i < 6; i++) {
+          if (T[i][p] === 0) continue;
+          for (let k = 0; k < 6; k++) if (T[k][q] !== 0) sum += T[i][p] * K[i][k] * T[k][q];
+        }
+        out[p][q] += sum / n;
+      }
+    }
+  }
+  return out;
+}
+
+/** 6x6 stiffness of the top ring about its centre at the state (H, phi). */
+export function poseStiffness(model, H, phi, { raw = false } = {}) {
+  const { m, d } = stiffnessSetup(model, H, phi);
+  const pose = makePoseEnergy(m, H, phi);
+  const energy = m.rest && m.kappa > 0 ? (q) => pose(q) + ringHinge(m, H + q[2], phi + q[5]) : pose;
+  const K = hessian6(energy, d, d / m.R);
+  return raw ? K : cyclicAverage(K, m.n);
+}
+
+/** Hessian of floorEnergy in (H, phi) at the state (same one-sided tangent as poseStiffness). */
+export function symmetricStiffness(model, H, phi) {
+  const { m, d } = stiffnessSetup(model, H, phi);
+  const dp = d / m.R;
+  const f = (u, v) => floorEnergy(m, u, v).total;
+  const f0 = f(H, phi);
   return {
-    axial:   modes.find(m => m.type === 'axial')?.omega   ?? NaN,
-    offaxis: modes.find(m => m.type === 'offaxis')?.omega ?? NaN,
+    HH: (f(H + d, phi) - 2 * f0 + f(H - d, phi)) / (d * d),
+    pp: (f(H, phi + dp) - 2 * f0 + f(H, phi - dp)) / (dp * dp),
+    Hp: (f(H + d, phi + dp) - f(H + d, phi - dp) - f(H - d, phi + dp) + f(H - d, phi - dp)) / (4 * d * dp),
   };
 }
 
-// ─── Full δ0 sweep for the current n, R0 (memoised) ─────────────────────────
-let _lastKey = '', _lastSweep = null;
+/** Top-ring mass in SI: payload disc of radius R plus half of one floor's sheet as a ring. */
+export function modalMass(design) {
+  const R = design.R / 1000;
+  const top = Math.max(0, design.params.payload) / 1000;
+  const ring = (0.5 * design.sheet.mass) / design.totalFloors / 1000;
+  return {
+    top, ring, m: top + ring,
+    Iz: (top * R * R) / 2 + ring * R * R,
+    Ixy: (top * R * R) / 4 + (ring * R * R) / 2,
+  };
+}
+
+function modeKind(p) {
+  const top = ['axial', 'torsion', 'lateral', 'rocking'].reduce((best, k) => (p[k] > p[best] ? k : best), 'axial');
+  if (top === 'axial' || top === 'torsion') {
+    if (p.axial >= 0.25 && p.torsion >= 0.25) return 'axial-torsional';
+    return top === 'axial' ? 'axial' : 'torsional';
+  }
+  if (p.lateral >= 0.25 && p.rocking >= 0.25) return 'lateral-rocking';
+  return top;
+}
+
+// mm-based stiffness entries to SI: N/mm -> N/m (x1000), N*mm/rad -> N*m/rad (x1e-3), N/rad unchanged
+const toSI = (i, j) => (i < 3 && j < 3 ? 1e3 : i >= 3 && j >= 3 ? 1e-3 : 1);
+
+/** Natural frequencies and mode classes for stiffness K (mm units) and mass (SI). */
+export function modesOf(K, mass) {
+  const diag = [mass.m, mass.m, mass.m, mass.Ixy, mass.Ixy, mass.Iz];
+  const w = diag.map((x) => 1 / Math.sqrt(x));
+  const A = [];
+  let scale = 0;
+  for (let i = 0; i < 6; i++) {
+    A.push([]);
+    for (let j = 0; j < 6; j++) A[i].push(0.5 * (K[i][j] + K[j][i]) * toSI(i, j) * w[i] * w[j]);
+    scale = Math.max(scale, Math.abs(A[i][i]));
+  }
+  scale = scale || 1;
+  const { values, vectors } = jacobiEigen(A.map((row) => row.map((x) => x / scale)));
+  return values.map((lam, k) => {
+    const v = vectors[k];
+    const nn = v.reduce((sum, x) => sum + x * x, 0) || 1;
+    const participation = {
+      axial: (v[2] * v[2]) / nn,
+      torsion: (v[5] * v[5]) / nn,
+      lateral: (v[0] * v[0] + v[1] * v[1]) / nn,
+      rocking: (v[3] * v[3] + v[4] * v[4]) / nn,
+    };
+    const mode = { f: Math.sqrt(Math.max(0, lam * scale)) / TAU, kind: modeKind(participation), participation };
+    if (lam < 0) mode.unstable = true;
+    return mode;
+  });
+}
+
+const sameState = (a, b, scale) => Math.abs(a.H - b.H) <= 0.02 * scale && Math.abs(a.phi - b.phi) <= 0.02;
+
+const contactNote = (key) => `The ${key} state rests flat on contact (H = 0), so it has no free vibration.`;
 
 /**
- * Kidambi & Wang's stress-free module for the current design: R0 (ring radius
- * over height) and δ0 (turn of the less-turned crease; the other turns
- * 2π/n further the same way). Taken from the exact deployed shape when the
- * pattern has one (geometry.js exactFold). When its two creases lean opposite
- * ways round the tube the shape is outside their family, so δ0 is null.
- * Falls back to the flat-pattern estimate for a geometry object without a
- * fold solution (as the tests pass in).
+ * Free stable equilibria from seeds [{ key, H, phi, step }]: contact states are
+ * dropped with a note, seeds sliding into one well are merged, and survivors
+ * are relabelled by height (the tallest is 'deployed').
  */
-export function modalStressFree(g) {
-  if (g.fold && g.rigidOk) {
-    const d = g.fold.deployed;
-    const R0 = g.fold.R3 / d.H;
-    if (Math.sign(d.psi) !== Math.sign(d.spanGreen)) return { R0, delta0: null };
-    return { R0, delta0: Math.min(Math.abs(d.psi), Math.abs(d.spanGreen)) };
+export function floorStates(model, seeds, scale) {
+  const states = [], notes = [];
+  for (const seed of seeds) {
+    const eq = findEquilibrium(model, seed.H, seed.phi, { step: seed.step });
+    if (eq.contact) { notes.push(contactNote(seed.key)); continue; }
+    if (states.some((s) => sameState(s, eq, scale))) continue;
+    states.push({ key: seed.key, ...eq });
   }
-  return { R0: g.R / g.floor_h, delta0: 2 * Math.abs(g.dx) / g.R };
+  states.sort((p, q) => q.H - p.H);
+  states.forEach((s, i) => { s.key = i === 0 ? 'deployed' : 'folded'; });
+  return { states: states.slice(0, 2), notes };
 }
 
-export function computeModalSweep(p, g) {
-  const n = p.n;
-  const { R0, delta0: delta0Exact } = modalStressFree(g);
-  const delta0Cur = delta0Exact === null ? NaN : delta0Exact;
-  const key = `${n},${R0.toFixed(6)}`;
-  if (key === _lastKey) return { ..._lastSweep, degCur: delta0Cur*180/Math.PI };
-  _lastKey = key;
-
-  const M = [1,1,1, (R0*R0)/2, (R0*R0)/4, (R0*R0)/4]; // [pB1,pB2,pB3,γ,β,α]
-  const DEG_MIN=5, DEG_MAX=89, STEPS=40;
-  const results = [];
-  for (let i=0;i<=STEPS;i++) {
-    const deg = DEG_MIN + (DEG_MAX-DEG_MIN)*i/STEPS;
-    const delta0 = deg*Math.PI/180;
-    const { a0, b0, minima } = findBranches(n, R0, delta0);
-    const fn = x => strainEnergy(x, n, R0, delta0, a0, b0);
-
-    let branchA = minima.reduce((best,m) => (Math.abs(m.pB3-1)<0.05 && (!best || m.pB3<best.pB3 || true)) ? m : best,
-      minima.find(m => Math.abs(m.pB3-1) < 0.05));
-    if (!branchA) branchA = { pB3:1, gamma:0, E:0 }; // trivially exact (stress-free by construction)
-    let branchB = null;
-    for (const m of minima) {
-      if (Math.abs(m.pB3 - branchA.pB3) > 0.06 && (!branchB || m.E < branchB.E)) branchB = m;
-    }
-
-    const point = { deg };
-    const mA = modesAt([0,0,branchA.pB3,branchA.gamma,0,0], fn, M);
-    point.axialA = mA.axial; point.offA = mA.offaxis;
-    if (branchB) {
-      const mB = modesAt([0,0,branchB.pB3,branchB.gamma,0,0], fn, M);
-      point.axialB = mB.axial; point.offB = mB.offaxis; point.pB3B = branchB.pB3;
-    }
-    results.push(point);
-  }
-  _lastSweep = { results, n, R0 };
-  return { results, n, R0, degCur: delta0Cur*180/Math.PI };
+function stateModes(model, eq, mass) {
+  const modes = modesOf(poseStiffness(model, eq.H, eq.phi), mass);
+  return { key: eq.key, H: eq.H, phi: eq.phi, E: eq.E, stable: modes.every((m) => !m.unstable), modes };
 }
 
-// ─── Chart ────────────────────────────────────────────────────────────────
-export function drawModal() {
-  const canvas = document.getElementById('canvasModal');
-  if (!canvas) return;
-  const wrap = canvas.parentElement;
-  const W = Math.max(200, Math.round(wrap.clientWidth) || 340);
-  const H = Math.max(200, Math.round(wrap.clientHeight) || 300);
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#1a1d28'; ctx.fillRect(0, 0, W, H);
-
-  const p = getP(), g = computeGeometry(p);
-  if (!(g.R > 0) || !(g.floor_h > 0)) return;
-
-  // The full eigenvalue sweep (~0.3-0.5s) only reruns when n or R0 actually
-  // changed (computeModalSweep memoises on that key) — but on a cache miss,
-  // painting nothing until it finishes makes the panel look frozen. Show a
-  // placeholder immediately and defer the real work to the next tick.
-  const sweepKey = `${p.n},${modalStressFree(g).R0.toFixed(6)}`;
-  if (sweepKey !== _lastKey) {
-    ctx.fillStyle = 'rgba(200,210,255,0.55)'; ctx.font = '11px "JetBrains Mono",monospace'; ctx.textAlign = 'center';
-    ctx.fillText('Computing modal frequencies\u2026', W/2, H/2 - 6);
-    ctx.fillStyle = 'rgba(139,144,160,0.55)'; ctx.font = '9px "JetBrains Mono",monospace';
-    ctx.fillText('6-DOF eigenvalue sweep, \u2248 0.3\u20130.5s', W/2, H/2 + 10);
-    setTimeout(() => { computeModalSweep(p, g); drawModal(); }, 15);
-    return;
+export const modalAnalysis = memoByParams((design) => {
+  const bad = invalidResult(design);
+  if (bad) return bad;
+  const energy = energyAnalysis(design);
+  if (!energy.ok) return { ok: false, reason: energy.reason };
+  try {
+    const model = floorModel(design);
+    const mass = modalMass(design);
+    const step = energy.H[1] - energy.H[0];
+    const seeds = [];
+    const seed = (key, w) => seeds.push({ key, H: energy.H[w.index], phi: energy.phi[w.index], step });
+    if (energy.deployed) seed('deployed', energy.deployed);
+    if (energy.bistable && energy.folded) seed('folded', energy.folded);
+    const { states, notes } = floorStates(model, seeds, design.states.deployed.H);
+    const out = states.map((eq) => stateModes(model, eq, mass));
+    for (const s of out) if (!s.stable) notes.push(`The ${s.key} state is unstable in the 6-DOF model (a stiffness eigenvalue is negative).`);
+    if (!out.length) return { ok: false, reason: notes[0] || 'No stable state to vibrate about.', mass, notes };
+    return { ok: true, mass, states: out, notes };
+  } catch (e) {
+    return { ok: false, reason: `Modal analysis failed for this design (${e && e.message ? e.message : e}).` };
   }
+});
 
-  const { results, degCur, n, R0 } = computeModalSweep(p, g);
+/** Range of rigid deployed twist (rad) at fixed n, R, h where the deployed state exists. */
+export function deployedTwistRange(n, R, h, phiNow) {
+  const a = 2 * R * Math.sin(Math.PI / n);
+  const lo0 = Math.PI / n, hi0 = Math.min(Math.PI, Math.PI / n + Math.PI / 2);
+  const ok = (phi) => {
+    const s = a / 2 + R * Math.sin(phi - Math.PI / n);
+    const st = rigidStates(n, R, s, h).states[0];
+    return Boolean(st && st.ok && st.H > 1e-3 * h);
+  };
+  const N = 720;
+  const at = (k) => lo0 + ((hi0 - lo0) * k) / N;
+  const good = [];
+  for (let k = 0; k <= N; k++) good.push(ok(at(k)));
+  // the valid run holding the current twist (or the nearest valid sample)
+  let k0 = Math.min(N, Math.max(0, Math.round(((phiNow - lo0) / (hi0 - lo0)) * N)));
+  if (!good[k0]) {
+    let best = -1;
+    for (let k = 0; k <= N; k++) if (good[k] && (best < 0 || Math.abs(k - k0) < Math.abs(best - k0))) best = k;
+    if (best < 0) return null;
+    k0 = best;
+  }
+  let i = k0, j = k0;
+  while (i > 0 && good[i - 1]) i--;
+  while (j < N && good[j + 1]) j++;
+  const edge = (inside, outside) => {
+    let p = inside, q = outside;
+    for (let k = 0; k < 30; k++) { const m = (p + q) / 2; if (ok(m)) p = m; else q = m; }
+    return p;
+  };
+  let lo = i > 0 ? edge(at(i), at(i - 1)) : at(i);
+  let hi = j < N ? edge(at(j), at(j + 1)) : at(j);
+  const inset = 0.005 * (hi - lo);
+  lo += inset; hi -= inset;
+  return hi > lo ? { lo, hi } : null;
+}
 
-  const DEG_MIN = results[0].deg, DEG_MAX = results[results.length-1].deg;
-  let maxF = 0.01;
-  results.forEach(r => { [r.axialA,r.offA,r.axialB,r.offB].forEach(v => { if (Number.isFinite(v) && v>maxF) maxF=v; }); });
-  maxF *= 1.12;
+const SWEEP_SERIES = [
+  ['deployed-axial', 'Deployed: axial / torsion'],
+  ['deployed-offaxis', 'Deployed: lateral / rocking'],
+  ['folded-axial', 'Folded: axial / torsion'],
+  ['folded-offaxis', 'Folded: lateral / rocking'],
+];
 
-  const PAD = { l:44, r:14, t:44, b:36 };
-  const gW = W-PAD.l-PAD.r, gH = H-PAD.t-PAD.b;
-  const toX = deg => PAD.l + (deg-DEG_MIN)/(DEG_MAX-DEG_MIN)*gW;
-  const toY = f   => PAD.t + gH - Math.min(f,maxF)/maxF*gH;
-
-  ctx.strokeStyle='rgba(59,130,246,0.1)'; ctx.lineWidth=0.5;
-  for(let i=0;i<=4;i++){const y=PAD.t+i*(gH/4);ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+gW,y);ctx.stroke();}
-  for(let i=0;i<=6;i++){const x=PAD.l+i*(gW/6);ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+gH);ctx.stroke();}
-  ctx.strokeStyle='rgba(180,200,255,0.45)'; ctx.lineWidth=1.2;
-  ctx.beginPath();ctx.moveTo(PAD.l,PAD.t);ctx.lineTo(PAD.l,PAD.t+gH);ctx.lineTo(PAD.l+gW,PAD.t+gH);ctx.stroke();
-
-  ctx.fillStyle='rgba(139,144,160,0.9)'; ctx.font='9px "JetBrains Mono",monospace'; ctx.textAlign='center';
-  ctx.fillText('design: twist \u03b4\u2080 (deg)', PAD.l+gW/2, H-6);
-  ctx.save();ctx.translate(10,PAD.t+gH/2);ctx.rotate(-Math.PI/2);ctx.fillText('modal frequency (nondim)',0,0);ctx.restore();
-  for(let i=0;i<=6;i++){const d=DEG_MIN+(i/6)*(DEG_MAX-DEG_MIN);ctx.fillStyle='rgba(139,144,160,0.7)';ctx.fillText(d.toFixed(0),toX(d),PAD.t+gH+11);}
-  ctx.textAlign='right';
-  for(let i=0;i<=4;i++){const f=maxF*(1-i/4);const y=PAD.t+(i/4)*gH;ctx.fillStyle='rgba(139,144,160,0.6)';ctx.fillText(f.toFixed(2),PAD.l-4,y+3);}
-
-  function drawCurve(key, color, dashed) {
-    ctx.beginPath(); let started=false;
-    for (const r of results) {
-      const v = r[key];
-      if (!Number.isFinite(v)) { started=false; continue; }
-      const x=toX(r.deg), y=toY(v);
-      if (!started) { ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+const memoSweep = memoByParams((design, samples) => {
+  const bad = invalidResult(design);
+  if (bad) return bad;
+  try {
+    const { n, R, a } = design;
+    const h = design.strip.h;
+    const p = design.params;
+    const range = deployedTwistRange(n, R, h, design.states.deployed.phi);
+    if (!range) return { ok: false, reason: 'No crease angle gives a deployed state at this strip height.' };
+    const mass = modalMass(design);
+    const count = Math.max(2, samples | 0);
+    const x = [];
+    const ys = Object.fromEntries(SWEEP_SERIES.map(([key]) => [key, []]));
+    for (let k = 0; k < count; k++) {
+      const phi0 = range.lo + ((range.hi - range.lo) * k) / (count - 1);
+      x.push(phi0 * DEG);
+      const row = {};
+      const s = a / 2 + R * Math.sin(phi0 - Math.PI / n);
+      const [dep, fol] = rigidStates(n, R, s, h).states;
+      if (dep && dep.ok) {
+        const model = makeFloorModel({ n, R, s, h }, design.material, {
+          stacking: design.stacking, panel: p.panel,
+          restStates: fol && fol.ok ? [dep, fol] : [dep], restFrac: p.restPct / 100,
+        });
+        const seeds = [{ key: 'deployed', H: dep.H, phi: dep.phi }];
+        if (fol && fol.ok) seeds.push({ key: 'folded', H: fol.H, phi: fol.phi });
+        for (const eq of floorStates(model, seeds, dep.H).states) {
+          const { modes } = stateModes(model, eq, mass);
+          const axial = modes.find((m) => AXIAL_KINDS.has(m.kind));
+          const off = modes.find((m) => !AXIAL_KINDS.has(m.kind));
+          row[`${eq.key}-axial`] = axial ? axial.f : null;
+          row[`${eq.key}-offaxis`] = off ? off.f : null;
+        }
+      }
+      for (const [key] of SWEEP_SERIES) ys[key].push(row[key] ?? null);
     }
-    ctx.strokeStyle=color; ctx.lineWidth=1.8; ctx.setLineDash(dashed?[5,3]:[]); ctx.stroke(); ctx.setLineDash([]);
+    return {
+      ok: true,
+      xLabel: 'Deployed twist (°)',
+      x,
+      current: design.twist.deployedDeg,
+      series: SWEEP_SERIES.map(([key, label]) => ({ key, label, y: ys[key] })),
+    };
+  } catch (e) {
+    return { ok: false, reason: `Modal sweep failed for this design (${e && e.message ? e.message : e}).` };
   }
-  drawCurve('axialA', '#e05252', false);
-  drawCurve('offA',   '#378ADD', false);
-  drawCurve('axialB', '#e05252', true);
-  drawCurve('offB',   '#378ADD', true);
+});
 
-  // Current-design marker. The label gets its own row above the 2-row
-  // legend (rather than sharing the legend's row like the dashed line's x
-  // position would suggest) since delta0 is usually small/mid-range for
-  // realistic default parameters, which puts a same-row label right on top
-  // of the legend text.
-  ctx.font='8px "JetBrains Mono",monospace'; ctx.textAlign='right';
-  if (degCur >= DEG_MIN && degCur <= DEG_MAX) {
-    const x = toX(degCur);
-    ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+gH);
-    ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='rgba(255,255,255,0.6)';
-    ctx.fillText('current \u03b4\u2080='+degCur.toFixed(1)+'\u00b0', PAD.l+gW, PAD.t-31);
-  } else if (!Number.isFinite(degCur)) {
-    ctx.fillStyle='rgba(250,204,21,0.65)';
-    ctx.fillText(g.rigidOk ? 'current design: creases lean opposite ways, outside this model' : 'current design: no strain-free shape', PAD.l+gW, PAD.t-31);
-  } else {
-    ctx.fillStyle='rgba(250,204,21,0.65)';
-    ctx.fillText(`current \u03b4\u2080=${degCur.toFixed(1)}\u00b0 (outside ${DEG_MIN}-${DEG_MAX}\u00b0 sweep)`, PAD.l+gW, PAD.t-31);
-  }
-
-  // Zero-stiffness annotation (global min of branch-A axial mode, if it dips low)
-  let zsIdx = -1, zsVal = Infinity;
-  results.forEach((r,i) => { if (Number.isFinite(r.axialA) && r.axialA < zsVal) { zsVal = r.axialA; zsIdx = i; } });
-  if (zsIdx > 0 && zsVal < maxF*0.12) {
-    const r = results[zsIdx], x=toX(r.deg), y=toY(r.axialA);
-    ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fillStyle='#facc15';ctx.fill();
-    ctx.fillStyle='#facc15';ctx.font='8px "JetBrains Mono",monospace';ctx.textAlign='center';
-    ctx.fillText('zero-stiffness', x, Math.max(PAD.t+8, y-8));
-  }
-
-  // Legend
-  ctx.textAlign='left'; ctx.font='8px "JetBrains Mono",monospace';
-  const leg = [['#e05252','axial \u2014 branch A',false],['#378ADD','off-axis \u2014 branch A',false],
-               ['#e05252','axial \u2014 branch B',true], ['#378ADD','off-axis \u2014 branch B',true]];
-  leg.forEach(([col,label,dashed],i) => {
-    const ly = PAD.t - 20 + (i%2)*9, lx = PAD.l + Math.floor(i/2)*115;
-    ctx.beginPath();ctx.moveTo(lx,ly-2);ctx.lineTo(lx+12,ly-2);
-    ctx.strokeStyle=col;ctx.lineWidth=1.8;ctx.setLineDash(dashed?[4,2]:[]);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='rgba(200,210,230,0.8)';ctx.fillText(label, lx+15, ly+1);
-  });
-
-  ctx.fillStyle='rgba(139,144,160,0.6)'; ctx.font='8px "JetBrains Mono",monospace'; ctx.textAlign='right';
-  ctx.fillText(`n=${n}  R\u2080=${R0.toFixed(3)}  \u00b7  Kidambi & Wang (2020)`, PAD.l+gW, H-6);
+export function modalSweep(design, { samples = 41 } = {}) {
+  return memoSweep(design, samples);
 }

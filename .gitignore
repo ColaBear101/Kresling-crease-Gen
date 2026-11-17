@@ -1,0 +1,6 @@
+# made by tools/make-samples.mjs
+samples/
+# single-page build for claude.ai artifacts (tools/build.mjs writes it next to kresling.html)
+dist/artifact.html
+# local editor and agent settings
+.claude/
