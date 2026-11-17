@@ -3,7 +3,7 @@ import { computeDesign } from '../js/core/design.js';
 import { buildPattern } from '../js/core/pattern.js';
 import { buildTube, foldStates, point, ringHeights } from '../js/core/tube.js';
 import { moldLayout, moldNotes, MOLD_MARGIN, RIDGE_FILL } from '../js/core/mold.js';
-import { DEFAULTS, PRESETS, normalizeParams, migrateParams } from '../js/core/params.js';
+import { DEFAULTS, PRESETS, normalizeParams, migrateParams, schemaFor } from '../js/core/params.js';
 import { sub, cross, dot, norm } from '../js/core/kresling.js';
 import { tubeMesh, moldMesh, moldSTL, meshStats, binarySTL, SPLIT_BELOW } from '../js/export/stl.js';
 import { tubeViewMesh, paintOrder } from '../js/render/view3d.js';
@@ -268,6 +268,24 @@ test('tube STL keeps its wall where floors meet: same-hand floors and end-ring c
   const disc = tubeMesh(computeDesign(P({ ...PRESETS.disc12.params, stacking: 'helical' })), { compress: 0 });
   ok(disc.splitVertices > 0 && disc.thickness.min > 0.9 * disc.wall, `disc ${(disc.thickness.min / disc.wall).toFixed(2)} x`);
   ok(SPLIT_BELOW > 0.5 && SPLIT_BELOW < 1);
+});
+
+test('tube wall can be as thin as 0.01 mm, in 0.01 mm steps', () => {
+  const ws = schemaFor('wall');
+  eq(ws.min, 0.01); eq(ws.step, 0.01); eq(ws.max, 5); eq(ws.default, 0.8);
+  eq(normalizeParams({ wall: 0.05 }).wall, 0.05, 'kept as typed');
+  eq(normalizeParams({ wall: 0.004 }).wall, 0.01, 'never below 0.01 mm');
+  for (const wall of [0.01, 0.05, 0.09]) {
+    for (const over of [{}, { stacking: 'helical' }, PRESETS.disc12.params, { ...PRESETS.disc12.params, stacking: 'helical' }, PRESETS.tower8.params]) {
+      const tag = `wall ${wall} ${JSON.stringify(over)}`;
+      const m = tubeMesh(computeDesign(P({ ...over, wall })), { compress: 0 });
+      const s = meshStats(binarySTL(m, m.header));
+      eq(m.wall, wall, `${tag}: used as set`);
+      ok(s.watertight && s.degenerate === 0, `${tag}: closed, no degenerate triangles`);
+      ok(m.thickness.min > 0.74 * wall && m.thickness.max < 2 * wall, `${tag}: ${(m.thickness.min / wall).toFixed(2)}-${(m.thickness.max / wall).toFixed(2)} x wall`);
+      ok(m.header.includes(`wall ${wall.toFixed(2)}`), `${tag}: header ${m.header}`);
+    }
+  }
 });
 
 test('tube STL header fits 80 bytes without cutting the fold state', () => {

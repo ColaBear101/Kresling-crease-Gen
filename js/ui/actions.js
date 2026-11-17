@@ -104,7 +104,7 @@ export function assemblyNotes(design, pattern, layout) {
     'FILES',
     ...fileRow(`pattern.pdf, ${svgList(layout)}`, `crease pattern${scaled ? ` at ${pct}` : ''}, the whole tube on one sheet`),
     `  pattern.dxf                             the same sheet for cutters and CAD, in mm${scaled ? ` at ${pct}` : ''}`,
-    '  tube.stl                                the tube in its deployed state, wall ' + f1(p.wall) + ' mm'
+    '  tube.stl                                the tube in its deployed state, wall ' + String(+p.wall.toFixed(2)) + ' mm'
       + (p.ringBottom > 0 || p.ringTop > 0 ? `, with its ${ringWords(p.ringBottom, p.ringTop)}` : '') + (scaled ? ' (design size, not scaled)' : ''),
     `  mold-mountain.stl, mold-valley.stl      embossing plates for pre-creasing${scaled ? `, made for the sheet at ${pct}` : ''}`,
     '  design.json                             open in Kresling Studio to keep editing',

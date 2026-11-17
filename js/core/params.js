@@ -102,7 +102,8 @@ export const SCHEMA = [
   { key: 'safety', group: 'analysis', type: 'range', label: 'Required safety factor', unit: '', min: 1, max: 5, step: 0.1, default: 1.5 },
 
   // ── 3-D printing ──
-  { key: 'wall', group: 'fab', type: 'range', label: 'Tube wall', unit: 'mm', min: 0.4, max: 5, step: 0.1, default: 0.8 },
+  { key: 'wall', group: 'fab', type: 'range', label: 'Tube wall', unit: 'mm', min: 0.01, max: 5, step: 0.01, default: 0.8,
+    help: 'Wall of the 3-D printed tube (Tube STL). Most FDM printers need at least one nozzle width, about 0.4 mm; resin printers can go thinner.' },
   { key: 'moldBase', group: 'fab', type: 'range', label: 'Mold plate', unit: 'mm', min: 1, max: 10, step: 0.5, default: 3 },
   { key: 'ridgeH', group: 'fab', type: 'range', label: 'Ridge height', unit: 'mm', min: 0.3, max: 5, step: 0.1, default: 1.2 },
   { key: 'ridgeW', group: 'fab', type: 'range', label: 'Ridge width', unit: 'mm', min: 0.3, max: 3, step: 0.1, default: 0.8 },

@@ -1563,7 +1563,8 @@ const SCHEMA = [
   { key: 'safety', group: 'analysis', type: 'range', label: 'Required safety factor', unit: '', min: 1, max: 5, step: 0.1, default: 1.5 },
 
   // ── 3-D printing ──
-  { key: 'wall', group: 'fab', type: 'range', label: 'Tube wall', unit: 'mm', min: 0.4, max: 5, step: 0.1, default: 0.8 },
+  { key: 'wall', group: 'fab', type: 'range', label: 'Tube wall', unit: 'mm', min: 0.01, max: 5, step: 0.01, default: 0.8,
+    help: 'Wall of the 3-D printed tube (Tube STL). Most FDM printers need at least one nozzle width, about 0.4 mm; resin printers can go thinner.' },
   { key: 'moldBase', group: 'fab', type: 'range', label: 'Mold plate', unit: 'mm', min: 1, max: 10, step: 0.5, default: 3 },
   { key: 'ridgeH', group: 'fab', type: 'range', label: 'Ridge height', unit: 'mm', min: 0.3, max: 5, step: 0.1, default: 1.2 },
   { key: 'ridgeW', group: 'fab', type: 'range', label: 'Ridge width', unit: 'mm', min: 0.3, max: 3, step: 0.1, default: 0.8 },
@@ -6415,7 +6416,7 @@ function assemblyNotes(design, pattern, layout) {
     'FILES',
     ...fileRow(`pattern.pdf, ${svgList(layout)}`, `crease pattern${scaled ? ` at ${pct}` : ''}, the whole tube on one sheet`),
     `  pattern.dxf                             the same sheet for cutters and CAD, in mm${scaled ? ` at ${pct}` : ''}`,
-    '  tube.stl                                the tube in its deployed state, wall ' + f1(p.wall) + ' mm'
+    '  tube.stl                                the tube in its deployed state, wall ' + String(+p.wall.toFixed(2)) + ' mm'
       + (p.ringBottom > 0 || p.ringTop > 0 ? `, with its ${ringWords(p.ringBottom, p.ringTop)}` : '') + (scaled ? ' (design size, not scaled)' : ''),
     `  mold-mountain.stl, mold-valley.stl      embossing plates for pre-creasing${scaled ? `, made for the sheet at ${pct}` : ''}`,
     '  design.json                             open in Kresling Studio to keep editing',
