@@ -84,7 +84,16 @@ export const storage = {
   remove(key) { try { localStorage.removeItem(key); } catch { /* ignore */ } },
 };
 
-/** Safe file-name stem from a design, e.g. "kresling_n6_d40_f6". */
-export function fileStem(params) {
-  return `kresling_n${params.n}_d${String(params.dia).replace('.', 'p')}_f${params.floors}${params.stack > 1 ? `x${params.stack}` : ''}`;
+/**
+ * Safe file-name stem from a design, e.g. "kresling_n6_d40_f6".
+ * Adds "x2" for a stack, "_left" for a mirrored pattern and, with { scaled: true }
+ * (files drawn at the print scale: pattern, DXF, molds), "_80pct" when the print
+ * scale is not 100 %, so different prints of one design do not overwrite each other:
+ * "kresling_n6_d40p5_f6x2_left_80pct".
+ */
+export function fileStem(params, opts = {}) {
+  const parts = [`kresling_n${params.n}_d${String(params.dia).replace('.', 'p')}_f${params.floors}${params.stack > 1 ? `x${params.stack}` : ''}`];
+  if (Number(params.chir) === -1) parts.push('left');
+  if (opts.scaled && params.scale !== undefined && Number(params.scale) !== 100) parts.push(`${params.scale}pct`);
+  return parts.join('_');
 }

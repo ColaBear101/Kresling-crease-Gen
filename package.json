@@ -1,0 +1,22 @@
+{
+  "name": "kresling-studio",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Design Kresling origami tubes: exact crease pattern, 3-D fold preview, bistability and snap mechanics, and fabrication exports.",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://kreslinggen.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ColaBear101/Kresling-crease-Gen.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node tools/test.mjs",
+    "build": "node tools/build.mjs",
+    "samples": "node tools/make-samples.mjs"
+  }
+}

@@ -1,14 +1,20 @@
-# Kresling Studio: build contract
+# Kresling Studio: architecture and code rules
 
-A from-scratch web app for designing Kresling origami tubes: exact crease pattern,
-3-D fold preview, mechanics (energy, snap force, vibration modes, buckling),
-a design explorer, and fabrication exports (SVG, PDF, PNG, DXF, STL, press-mold STL).
-It re-implements the feature set of github.com/ColaBear101/Kresling-crease-Gen with
-exact geometry. Do not copy code from that repo.
+How the app is put together and the rules every module follows: units and frames,
+the module map, the design object, the physics and export APIs, the DOM and mount
+protocol, and the visual direction. Read it before changing code; the header comment
+of each source file is the authoritative API doc for that file.
+
+Kresling Studio designs Kresling origami tubes: exact crease pattern, 3-D fold preview,
+mechanics (energy, snap force, vibration modes, buckling), a design explorer, and
+fabrication exports (SVG, PDF, PNG, DXF, STL, press-mold STL). It replaced Kresling
+Crease Generator, the earlier app in this repository (last version: commit fb4f988),
+and was written from scratch with exact geometry rather than adapted from that code.
 
 Project root = the folder containing this file's parent (`index.html` lives there).
-Read the existing source files named below before writing code that uses them;
-their header comments are the authoritative API docs.
+Commands: `npm start` (dev server), `npm test` (every test file), `npm run build`
+(the single-file app in `dist/`), `npm run samples`. No dependencies; `npm install`
+is never needed.
 
 ## 1. Rules for all code
 
@@ -24,7 +30,8 @@ their header comments are the authoritative API docs.
 - Every top-level name is unique per module; keep files focused (< ~700 lines).
 - No `alert/confirm/prompt`, no `window.open`, no `window.print` (they are blocked where
   the app is hosted). Use `app.toast()` for messages and in-page UI for confirmations.
-- `localStorage` only through `storage` in `js/app/util.js` (never throws).
+- `localStorage` only through `storage` in `js/app/util.js` (never throws). One exception: the
+  inline script in `index.html` that applies a saved theme before the first paint.
 - Canvas code: use `fitCanvas()` from `js/app/util.js` (devicePixelRatio aware), redraw on
   resize via the `resize()` hook, and read colours with `cssVar('--token')` from
   `js/ui/theme.js` (theme can change at runtime; `onThemeChange(fn)` exists).
@@ -58,8 +65,12 @@ their header comments are the authoritative API docs.
 | `js/core/info.js` | `infoLines(design, pattern, layout)`, `LEGEND`, `SCALE_BAR_MM` |
 | `js/physics/mechanics.js` | floor energy model (CST panels + hinges): `makeFloorModel`, `floorEnergy`, `relaxTwist`, `energyPath`, `analysePath`, `makePoseEnergy`, `hessian6`, `jacobiEigen`, `panelBucklingStrain`, `hingeStiffness`, `wrapAngle` |
 | `js/app/store.js` | `createStore()`; params with undo/redo, view state, memoised `design()`, `pattern()`, `layout()`, user presets; `VIEW_DEFAULTS` lists every view key |
-| `js/app/util.js` | `el`, `debounce`, `rafThrottle`, `fmt`, `fmtSI`, `clamp`, `fitCanvas`, `storage`, `fileStem` |
-| `js/ui/theme.js` | `cssVar`, `PRINT`, `DASH`, `onThemeChange` |
+| `js/app/util.js` | `el`, `debounce`, `rafThrottle`, `fmt`, `fmtSI`, `clamp`, `fitCanvas`, `storage`, `fileStem(params, { scaled })` (adds `_left` for a mirrored pattern and, for files at the print scale, `_80pct` when the scale is not 100 %) |
+| `js/app/share.js` | share links: `shareHash(params)` → `#v=1&key=value…` (values that differ from the frozen `LINK_BASE`), `shareUrl(params, location)`, `readShareHash(hash)` → `null` \| `{ ok, params, ignored }` \| `{ ok: false, error }`, `LIVE_URL` |
+| `js/ui/theme.js` | `cssVar`, `PRINT`, `DASH`, `onThemeChange`, theme preference `themePref()`, `setThemePref('auto'\|'light'\|'dark')`, `nextThemePref()` (index.html applies a saved choice before the first paint) |
+| `js/ui/openfile.js` | `openDesignFile(app, file)` (Open button and drop), `installDropOpen(app)` (drop a design file anywhere on the page) |
+| `js/ui/sectionnav.js` | `mountSectionNav(container)`: the bottom section bar on phones (Design, Pattern, 3-D, Analysis) |
+| `js/ui/shortcuts.js` | `keyAction(event)`, `installShortcuts(app, { fit, share, theme, help })`, `SHORTCUTS` (listed in the help dialog) |
 | `js/export/save.js` | `saveFile(filename, data, mime)`, `saveMessage(result)`, `primeSaving()`, `isHosted()` |
 | `js/export/zip.js` | `zipFiles([{name, data}])`, `crc32`, `toBytes` |
 | `test/harness.mjs` | `test`, `ok`, `near`, `eq`, `run` (run tests with `node test/<file>.test.mjs`) |
@@ -179,7 +190,7 @@ IBM Plex Mono), and exactly `<script type="module" src="js/main.js"></script>`.
 
 Containers (ids): `#app`, `#topbar`, `#sidebar`, `#center` with `#center-tabs` and panes
 `#pane-pattern`, `#pane-mold`, `#pane-explorer`; `#right` with `#pane-3d` and `#pane-analysis`;
-`#actions`; `#toast-root`; `#sources` (dialog). Panes are flex/grid children that fill their
+`#actions`; `#section-nav` (phones only); `#toast-root`; `#sources` (dialog). Panes are flex/grid children that fill their
 area; a view fills its container (`width/height: 100%`) and must not set page-level styles.
 
 Each view module exports `mountX(container, app)` returning
@@ -192,7 +203,9 @@ Each view module exports `mountX(container, app)` returning
 Mount functions: `mountFlatView` (js/render/flat.js) → `#pane-pattern`;
 `mountMoldView` (js/render/moldview.js) → `#pane-mold`; `mountView3d` (js/render/view3d.js) →
 `#pane-3d`; `mountAnalysis` (js/ui/panels.js) → `#pane-analysis`; `mountExplorer`
-(js/ui/explorer.js) → `#pane-explorer`.
+(js/ui/explorer.js) → `#pane-explorer`; `mountToolbar` (js/ui/toolbar.js) → `#topbar`;
+`mountControls` (js/ui/controls.js) → `#sidebar`; `mountActions` (js/ui/actions.js) → `#actions`;
+`mountSectionNav` (js/ui/sectionnav.js) → `#section-nav`.
 
 `app` object (built in `js/main.js`):
 `{ store, toast(message, kind = 'info'|'ok'|'warn'|'error', opts), save(filename, data, mime) → Promise<result> (saves and toasts), exportAs(format) → Promise (format: 'svg'|'pdf'|'png'|'dxf'|'stl-tube'|'stl-molds'|'json'|'pack') }`.

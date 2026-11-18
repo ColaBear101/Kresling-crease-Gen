@@ -13,6 +13,10 @@
 <link rel="stylesheet" href="css/view3d.css">
 <link rel="stylesheet" href="css/panels.css">
 <link rel="stylesheet" href="css/explorer.css">
+<script>
+  // Apply a saved light/dark choice before the first paint (js/ui/theme.js owns the key).
+  try { var kt = JSON.parse(localStorage.getItem('kresling-studio:v1:theme')); if (kt === 'light' || kt === 'dark') document.documentElement.setAttribute('data-theme', kt); } catch (e) {}
+</script>
 </head>
 <body>
 <div id="app">
@@ -38,6 +42,8 @@
 
   <section id="actions" aria-label="Export and print"></section>
 </div>
+
+<nav id="section-nav" class="section-nav" aria-label="Jump to section"></nav>
 
 <div id="toast-root" aria-live="polite"></div>
 

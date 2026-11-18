@@ -2,6 +2,8 @@
 // on :root (see css/app.css); canvases read them here so light and dark
 // themes both work and nothing hard-codes a colour.
 
+import { storage } from '../app/util.js';
+
 const cache = new Map();
 
 /** Value of a CSS custom property, e.g. cssVar('--ink'). */
@@ -45,4 +47,29 @@ if (typeof window !== 'undefined' && window.matchMedia) {
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   if (mq.addEventListener) mq.addEventListener('change', fire);
   new MutationObserver(fire).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
+}
+
+// ── Theme preference: 'auto' (follow the system), 'light' or 'dark' ──
+// Kept in this browser; index.html applies a saved choice before the first paint
+// (same key), so the page does not flash in the other theme.
+export const THEME_KEY = 'kresling-studio:v1:theme';
+export const THEME_PREFS = ['auto', 'light', 'dark'];
+
+export function themePref() {
+  const v = storage.get(THEME_KEY, 'auto');
+  return THEME_PREFS.includes(v) ? v : 'auto';
+}
+
+/** Apply and remember a preference. Canvases redraw through onThemeChange. */
+export function setThemePref(pref) {
+  const p = THEME_PREFS.includes(pref) ? pref : 'auto';
+  if (p === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', p);
+  storage.set(THEME_KEY, p);   // false in private mode: the choice then lasts for this visit
+  return p;
+}
+
+/** auto -> light -> dark -> auto */
+export function nextThemePref(pref = themePref()) {
+  return THEME_PREFS[(THEME_PREFS.indexOf(pref) + 1) % THEME_PREFS.length];
 }

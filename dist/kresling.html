@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
 /* Kresling Studio: shell styles. Tokens, base elements, the page grid and the
-   shared classes other stylesheets build on (see docs/CONTRACT.md section 7).
+   shared classes other stylesheets build on (see docs/ARCHITECTURE.md section 7).
    View stylesheets add only their own .flat-* .v3d-* .an-* .ex-* classes. */
 
 /* ── Tokens (light) ─────────────────────────────────────────────────────── */
@@ -898,6 +898,71 @@ dialog#sources::backdrop { background: rgba(10, 16, 13, 0.5); }
   .src-body { padding: 4px 16px 20px; }
 }
 
+/* ── Drop a design file anywhere (js/ui/openfile.js) ─────────────────── */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  pointer-events: none;
+}
+.drop-overlay[hidden] { display: none; }
+.drop-card {
+  display: grid;
+  gap: 4px;
+  max-width: 420px;
+  padding: 28px 32px;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-2);
+  text-align: center;
+  box-shadow: var(--shadow-1);
+}
+.drop-card strong { color: var(--ink); font-size: 15px; font-weight: 600; }
+
+/* ── Section bar for phones (js/ui/sectionnav.js) ─────────────────────── */
+.section-nav { display: none; }
+@media (max-width: 759.98px) {
+  .section-nav {
+    position: fixed;
+    z-index: 30;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 4px max(8px, env(safe-area-inset-right, 0px)) max(4px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.08);
+  }
+  .snav-btn {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    min-height: 48px;
+    padding: 6px 0 4px;
+    border: 0;
+    border-radius: var(--radius-m);
+    background: transparent;
+    color: var(--ink-3);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .snav-btn svg { width: 20px; height: 20px; }
+  .snav-btn[aria-current="true"] { color: var(--accent); background: var(--accent-soft); }
+  .snav-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  #app { padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+  #app > #sidebar, #app > #center, #pane-3d, #pane-analysis { scroll-margin-top: 12px; }
+  #toast-root { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+}
+
 /* ── Motion ──────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1421,6 +1486,10 @@ dialog#sources::backdrop { background: rgba(10, 16, 13, 0.5); }
 @media (max-width: 519.98px) { .ex-item { grid-template-columns: minmax(0, 1fr) auto; } .ex-item > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; } }
 .ex-none { padding: 6px 0; font-size: 12.5px; }
 </style>
+<script>
+  // Apply a saved light/dark choice before the first paint (js/ui/theme.js owns the key).
+  try { var kt = JSON.parse(localStorage.getItem('kresling-studio:v1:theme')); if (kt === 'light' || kt === 'dark') document.documentElement.setAttribute('data-theme', kt); } catch (e) {}
+</script>
 </head>
 <body>
 <div id="app">
@@ -1446,6 +1515,8 @@ dialog#sources::backdrop { background: rgba(10, 16, 13, 0.5); }
 
   <section id="actions" aria-label="Export and print"></section>
 </div>
+
+<nav id="section-nav" class="section-nav" aria-label="Jump to section"></nav>
 
 <div id="toast-root" aria-live="polite"></div>
 
@@ -2428,9 +2499,18 @@ const storage = {
   remove(key) { try { localStorage.removeItem(key); } catch { /* ignore */ } },
 };
 
-/** Safe file-name stem from a design, e.g. "kresling_n6_d40_f6". */
-function fileStem(params) {
-  return `kresling_n${params.n}_d${String(params.dia).replace('.', 'p')}_f${params.floors}${params.stack > 1 ? `x${params.stack}` : ''}`;
+/**
+ * Safe file-name stem from a design, e.g. "kresling_n6_d40_f6".
+ * Adds "x2" for a stack, "_left" for a mirrored pattern and, with { scaled: true }
+ * (files drawn at the print scale: pattern, DXF, molds), "_80pct" when the print
+ * scale is not 100 %, so different prints of one design do not overwrite each other:
+ * "kresling_n6_d40p5_f6x2_left_80pct".
+ */
+function fileStem(params, opts = {}) {
+  const parts = [`kresling_n${params.n}_d${String(params.dia).replace('.', 'p')}_f${params.floors}${params.stack > 1 ? `x${params.stack}` : ''}`];
+  if (Number(params.chir) === -1) parts.push('left');
+  if (opts.scaled && params.scale !== undefined && Number(params.scale) !== 100) parts.push(`${params.scale}pct`);
+  return parts.join('_');
 }
 return Object.freeze({ el, debounce, rafThrottle, fmt, fmtSI, clamp, fitCanvas, storage, fileStem });
 })();
@@ -2606,12 +2686,105 @@ function createStore(initial) {
 }
 return Object.freeze({ STORAGE_KEY, VIEW_DEFAULTS, createStore });
 })();
+// ── js/app/share.js ──
+__m["js/app/share.js"] = (() => {
+const { SCHEMA, RENAMED_KEYS, normalizeParams, materialFields } = __m["js/core/params.js"];
+// Share links: a design carried in the URL hash.
+//
+//   shareHash(params)            -> '#v=1&n=8&dia=60'   (only values that differ from LINK_BASE)
+//   shareUrl(params, location?)  -> full link: this page's address, or LIVE_URL when the page
+//                                   is not served over http(s) (opened from disk, sandboxed host)
+//   readShareHash(hash)          -> null when the hash carries no design,
+//                                   { ok: true, params, ignored[] } or { ok: false, error }
+//   LIVE_URL                     -> the hosted app
+//
+// The hash is plain `key=value` pairs, so a link can be read and edited by hand.
+// Values are written relative to LINK_BASE, a frozen copy of the defaults at link
+// version 1, not to DEFAULTS: if a later version changes a default, an old link still
+// opens the same design. Parameters added after version 1 are not in LINK_BASE and
+// take their defaults, as they do when an older design file is opened.
+// A hand-made link that names a material but none of its values gets that
+// material's values (as picking it in the sidebar does).
+// Pure module: no DOM access (location is passed in).
+
+
+
+const LIVE_URL = 'https://kreslinggen.vercel.app/';
+const LINK_VERSION = '1';
+
+const LINK_BASE = Object.freeze({
+  designBy: 'heights', n: 6, dia: 40, H0: 24, H1: 8, hFlat: 26, angle: 108.3, chir: 1,
+  floors: 6, stack: 1, stacking: 'alternate',
+  page: 'A4', orient: 'auto', scale: 100, margin: 8, ringBottom: 10, ringTop: 10,
+  seamAuto: true, extcols: 1, seamL: 14, seamR: 0,
+  material: 'paper80', thick: 100, E: 3.5, nu: 0.3, rho: 0.8, strainMax: 1.5,
+  hingeW: 2, panel: 'thin', restPct: 50,
+  payload: 5, endCond: 'fixed-free', safety: 1.5,
+  wall: 0.8, moldBase: 3, ridgeH: 1.2, ridgeW: 0.8, ridgeGap: 1,
+});
+
+const SCHEMA_KEYS = SCHEMA.map((s) => s.key);
+const KNOWN = new Set([...SCHEMA_KEYS, ...Object.keys(RENAMED_KEYS)]);
+const MATERIAL_VALUES = ['thick', 'E', 'nu', 'rho', 'strainMax'];
+
+function same(a, b) {
+  return String(a) === String(b);
+}
+
+/** '#v=1&…' with every parameter that differs from LINK_BASE, in schema order. */
+function shareHash(params) {
+  const p = normalizeParams(params || {});
+  const q = new URLSearchParams();
+  q.set('v', LINK_VERSION);
+  for (const key of SCHEMA_KEYS) {
+    const base = key in LINK_BASE ? LINK_BASE[key] : SCHEMA.find((s) => s.key === key).default;
+    if (!same(p[key], base)) q.set(key, typeof p[key] === 'boolean' ? (p[key] ? '1' : '0') : String(p[key]));
+  }
+  return `#${q.toString()}`;
+}
+
+/**
+ * The link to share. loc is window.location (or any { protocol, origin, pathname, search });
+ * pages that are not served over http(s) link to the hosted app instead.
+ */
+function shareUrl(params, loc) {
+  const web = loc && /^https?:$/.test(loc.protocol || '') && loc.origin && loc.origin !== 'null';
+  const base = web ? `${loc.origin}${loc.pathname || '/'}${loc.search || ''}` : LIVE_URL;
+  return `${base}${shareHash(params)}`;
+}
+
+/** Read a design from a URL hash. null when the hash is not a share link. */
+function readShareHash(hash) {
+  if (typeof hash !== 'string') return null;
+  const text = hash.replace(/^#/, '').trim();
+  if (!text) return null;
+  let q;
+  try { q = new URLSearchParams(text); } catch { return null; }
+  if (!q.has('v')) return null;
+  const v = q.get('v');
+  if (v !== LINK_VERSION) {
+    return { ok: false, error: `This link was made by a newer version of the app (link version ${v}). Open it on ${LIVE_URL}` };
+  }
+  const raw = {};
+  const ignored = [];
+  for (const [key, value] of q) {
+    if (key === 'v') continue;
+    if (KNOWN.has(key)) raw[key] = value;
+    else ignored.push(key);
+  }
+  if ('material' in raw && !MATERIAL_VALUES.some((k) => k in raw)) Object.assign(raw, materialFields(raw.material));
+  return { ok: true, params: normalizeParams({ ...LINK_BASE, ...raw }), ignored };
+}
+return Object.freeze({ LIVE_URL, LINK_VERSION, LINK_BASE, shareHash, shareUrl, readShareHash });
+})();
 // ── js/ui/theme.js ──
 __m["js/ui/theme.js"] = (() => {
-
+const { storage } = __m["js/app/util.js"];
 // Theme access for canvas drawing. All colours live as CSS custom properties
 // on :root (see css/app.css); canvases read them here so light and dark
 // themes both work and nothing hard-codes a colour.
+
+
 
 const cache = new Map();
 
@@ -2657,7 +2830,32 @@ if (typeof window !== 'undefined' && window.matchMedia) {
   if (mq.addEventListener) mq.addEventListener('change', fire);
   new MutationObserver(fire).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
 }
-return Object.freeze({ cssVar, PRINT, DASH, onThemeChange });
+
+// ── Theme preference: 'auto' (follow the system), 'light' or 'dark' ──
+// Kept in this browser; index.html applies a saved choice before the first paint
+// (same key), so the page does not flash in the other theme.
+const THEME_KEY = 'kresling-studio:v1:theme';
+const THEME_PREFS = ['auto', 'light', 'dark'];
+
+function themePref() {
+  const v = storage.get(THEME_KEY, 'auto');
+  return THEME_PREFS.includes(v) ? v : 'auto';
+}
+
+/** Apply and remember a preference. Canvases redraw through onThemeChange. */
+function setThemePref(pref) {
+  const p = THEME_PREFS.includes(pref) ? pref : 'auto';
+  if (p === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', p);
+  storage.set(THEME_KEY, p);   // false in private mode: the choice then lasts for this visit
+  return p;
+}
+
+/** auto -> light -> dark -> auto */
+function nextThemePref(pref = themePref()) {
+  return THEME_PREFS[(THEME_PREFS.indexOf(pref) + 1) % THEME_PREFS.length];
+}
+return Object.freeze({ cssVar, PRINT, DASH, onThemeChange, THEME_KEY, THEME_PREFS, themePref, setThemePref, nextThemePref });
 })();
 // ── js/ui/toast.js ──
 __m["js/ui/toast.js"] = (() => {
@@ -3576,16 +3774,118 @@ function isPlainObject(v) {
 }
 return Object.freeze({ CREASE_GEN, designFile, readDesignFile, fromCreaseGen });
 })();
+// ── js/ui/openfile.js ──
+__m["js/ui/openfile.js"] = (() => {
+const { el } = __m["js/app/util.js"];
+const { readDesignFile } = __m["js/export/json.js"];
+// Opening design files: from the Open button, or dropped anywhere on the page.
+//
+//   openDesignFile(app, file)  -> Promise<boolean>   reads a File, loads it, says what happened
+//   installDropOpen(app)       -> uninstall()        drag a .json file onto the window to open it
+//
+// Both go through readDesignFile (js/export/json.js), so the app's own design files and
+// presets exported by Kresling-crease-Gen open the same way. The drop target is the whole
+// window; an overlay shows while a file is dragged over it. Dragging text or links is
+// left alone.
+
+
+
+
+/** Read and load a design file. Resolves to true when the design was loaded. */
+async function openDesignFile(app, file) {
+  if (!file) return false;
+  try {
+    const res = readDesignFile(await file.text());
+    if (!res.ok) { app.toast(`Could not open ${file.name}: ${res.error}`, 'error'); return false; }
+    app.store.load(res.params);
+    // say what was converted, limited or left out: a plain "Opened" would hide it
+    const said = [...(res.notes || [])];
+    if (res.ignored && res.ignored.length) {
+      const names = res.ignored.slice(0, 6).join(', ') + (res.ignored.length > 6 ? ', …' : '');
+      said.push(`Not used by this app and left out: ${names}.`);
+    }
+    if (!said.length) app.toast(`Opened ${file.name}. Undo goes back.`, 'ok');
+    else app.toast(`Opened ${file.name}. ${said.join(' ')} Undo goes back.`, res.source === 'crease-gen' && res.drawable !== false ? 'info' : 'warn', { timeout: 0 });
+    return true;
+  } catch (e) {
+    app.toast(`Could not read ${file.name}.`, 'error');
+    return false;
+  }
+}
+
+function carriesFiles(e) {
+  const types = e.dataTransfer && e.dataTransfer.types;
+  return Boolean(types) && [...types].includes('Files');
+}
+
+function installDropOpen(app) {
+  const overlay = el('div', { class: 'drop-overlay', hidden: true, 'aria-hidden': 'true' },
+    el('div', { class: 'drop-card' },
+      el('strong', { text: 'Drop to open the design' }),
+      el('span', { text: 'A design file (.json) saved by this app, or a Kresling-crease-Gen preset' })));
+  document.body.append(overlay);
+  let depth = 0;   // dragenter/dragleave fire for every child element crossed
+
+  const show = (on) => { overlay.hidden = !on; };
+  function onEnter(e) {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    depth += 1;
+    show(true);
+  }
+  function onOver(e) {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }
+  function onLeave(e) {
+    if (!carriesFiles(e)) return;
+    depth = Math.max(0, depth - 1);
+    if (!depth) show(false);
+  }
+  async function onDrop(e) {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    show(false);
+    const files = [...(e.dataTransfer.files || [])];
+    if (!files.length) return;
+    if (document.querySelector('dialog[open]')) return;
+    if (files.length > 1) app.toast(`Opening ${files[0].name}; one design opens at a time.`, 'info');
+    await openDesignFile(app, files[0]);
+  }
+  window.addEventListener('dragenter', onEnter);
+  window.addEventListener('dragover', onOver);
+  window.addEventListener('dragleave', onLeave);
+  window.addEventListener('drop', onDrop);
+  return () => {
+    window.removeEventListener('dragenter', onEnter);
+    window.removeEventListener('dragover', onOver);
+    window.removeEventListener('dragleave', onLeave);
+    window.removeEventListener('drop', onDrop);
+    overlay.remove();
+  };
+}
+return Object.freeze({ openDesignFile, installDropOpen });
+})();
 // ── js/ui/toolbar.js ──
 __m["js/ui/toolbar.js"] = (() => {
 const { el } = __m["js/app/util.js"];
 const { PRESETS, normalizeParams, migrateParams, DEFAULTS } = __m["js/core/params.js"];
-const { readDesignFile } = __m["js/export/json.js"];
+const { shareUrl } = __m["js/app/share.js"];
+const { isHosted } = __m["js/export/save.js"];
 const { statusInfo } = __m["js/ui/controls.js"];
+const { openDesignFile } = __m["js/ui/openfile.js"];
+const { themePref, setThemePref, nextThemePref } = __m["js/ui/theme.js"];
 // Top bar: wordmark, design status, presets (built-in and saved in this
-// browser), undo/redo, open/save a design file, help.
+// browser), undo/redo, open/save a design file, copy a share link, theme, help.
 //
 //   mountToolbar(container, app, { onHelp }) -> { update(change), resize(), setActive() }
+//   copyShareLink(app)  -> Promise<boolean>   copies a link that opens the current design
+//   cycleTheme(app?)    -> the new preference ('auto' | 'light' | 'dark')
+
+
+
 
 
 
@@ -3601,9 +3901,55 @@ const ICONS = {
   open: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14V13H2z"/></svg>',
   save: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>',
   help: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1v.3"/><circle cx="8" cy="11.6" r=".4" fill="currentColor"/></svg>',
+  link: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9"/><path d="M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9"/></svg>',
+  auto: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/></svg>',
+  light: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>',
+  dark: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z"/></svg>',
   check: '<svg class="pop-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>',
   trash: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>',
 };
+
+const THEME_WORDS = {
+  auto: 'Theme: follows the system',
+  light: 'Theme: light',
+  dark: 'Theme: dark',
+};
+
+// Clipboard API first; the hidden-textarea copy for pages where it is blocked.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* fall through */ }
+  const ta = el('textarea', { readonly: true, 'aria-hidden': 'true', style: { position: 'fixed', top: '-1000px', opacity: '0' } });
+  ta.value = text;
+  document.body.append(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+/** Copy a link that opens the current design (see js/app/share.js). */
+async function copyShareLink(app) {
+  if (!app.store.design().valid) app.toast('This design has no valid fold yet; the link opens it as it is.', 'warn');
+  const hosted = await isHosted();
+  const url = shareUrl(app.store.params, hosted ? null : window.location);
+  if (await copyText(url)) {
+    const where = window.location.protocol === 'file:' || hosted ? ' It opens in the online app.' : '';
+    app.toast(`Link copied: it opens this design.${where}`, 'ok');
+    return true;
+  }
+  app.toast(`Copy this link to share the design: ${url}`, 'info', { timeout: 0 });
+  return false;
+}
+
+/** Switch auto -> light -> dark and say which one is on. */
+function cycleTheme(app) {
+  const pref = setThemePref(nextThemePref(themePref()));
+  if (app) app.toast(`${THEME_WORDS[pref]}.`, 'info');
+  return pref;
+}
 
 function iconButton(icon, label, extra = {}) {
   const b = el('button', { type: 'button', class: 'icon-btn', 'aria-label': label, title: label, ...extra });
@@ -3728,27 +4074,12 @@ function mountToolbar(container, app, { onHelp } = {}) {
 
   // ── files ──
   const fileInput = el('input', { type: 'file', accept: '.json,application/json', hidden: true, 'aria-hidden': 'true', tabindex: '-1' });
-  fileInput.addEventListener('change', async () => {
+  fileInput.addEventListener('change', () => {
     const file = fileInput.files && fileInput.files[0];
     fileInput.value = '';
-    if (!file) return;
-    try {
-      const res = readDesignFile(await file.text());
-      if (!res.ok) { app.toast(`Could not open ${file.name}: ${res.error}`, 'error'); return; }
-      store.load(res.params);
-      // say what was converted, limited or left out: a plain "Opened" would hide it
-      const said = [...(res.notes || [])];
-      if (res.ignored && res.ignored.length) {
-        const names = res.ignored.slice(0, 6).join(', ') + (res.ignored.length > 6 ? ', …' : '');
-        said.push(`Not used by this app and left out: ${names}.`);
-      }
-      if (!said.length) app.toast(`Opened ${file.name}.`, 'ok');
-      else app.toast(`Opened ${file.name}. ${said.join(' ')} Undo goes back.`, res.source === 'crease-gen' && res.drawable !== false ? 'info' : 'warn', { timeout: 0 });
-    } catch (e) {
-      app.toast(`Could not read ${file.name}.`, 'error');
-    }
+    openDesignFile(app, file);
   });
-  const openBtn = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', title: 'Open a design file (.json)' });
+  const openBtn = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', title: 'Open a design file (.json). You can also drop one on the page.' });
   openBtn.innerHTML = ICONS.open;
   openBtn.append(el('span', { class: 'tb-label', text: 'Open' }));
   openBtn.addEventListener('click', () => fileInput.click());
@@ -3756,6 +4087,21 @@ function mountToolbar(container, app, { onHelp } = {}) {
   saveBtn.innerHTML = ICONS.save;
   saveBtn.append(el('span', { class: 'tb-label', text: 'Save design' }));
   saveBtn.addEventListener('click', () => app.exportAs('json'));
+  const linkBtn = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', title: 'Copy a link that opens this design (L)' });
+  linkBtn.innerHTML = ICONS.link;
+  linkBtn.append(el('span', { class: 'tb-label', text: 'Copy link' }));
+  linkBtn.addEventListener('click', () => copyShareLink(app));
+
+  const themeBtn = iconButton(ICONS.auto, THEME_WORDS.auto);
+  function syncTheme() {
+    const pref = themePref();
+    themeBtn.innerHTML = ICONS[pref];
+    const label = `${THEME_WORDS[pref]}. Click to switch (T).`;
+    themeBtn.setAttribute('aria-label', label);
+    themeBtn.title = label;
+  }
+  themeBtn.addEventListener('click', () => { cycleTheme(); syncTheme(); });
+  syncTheme();
 
   const help = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', title: 'How it works, shortcuts and sources' });
   help.innerHTML = ICONS.help;
@@ -3767,8 +4113,9 @@ function mountToolbar(container, app, { onHelp } = {}) {
     presets, el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
     el('div', { class: 'tb-group', role: 'group', 'aria-label': 'History' }, undo, redo),
     el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
-    el('div', { class: 'tb-group', role: 'group', 'aria-label': 'Design file' }, openBtn, saveBtn, fileInput),
-    help,
+    el('div', { class: 'tb-group', role: 'group', 'aria-label': 'Design file' }, openBtn, saveBtn, linkBtn, fileInput),
+    el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
+    themeBtn, help,
   );
 
   function sync() {
@@ -3783,12 +4130,94 @@ function mountToolbar(container, app, { onHelp } = {}) {
   sync();
 
   return {
-    update(change) { if (!change || change.kind === 'params') sync(); },
+    update(change) {
+      if (!change || change.kind === 'params') sync();
+      if (change && change.kind === 'theme') syncTheme();
+    },
     resize() {},
     setActive() {},
   };
 }
-return Object.freeze({ mountToolbar });
+return Object.freeze({ copyShareLink, cycleTheme, mountToolbar });
+})();
+// ── js/ui/sectionnav.js ──
+__m["js/ui/sectionnav.js"] = (() => {
+const { el, rafThrottle } = __m["js/app/util.js"];
+// Section bar for phones: on narrow screens the four areas of the app sit one
+// under the other, so a bar fixed to the bottom jumps between them and marks
+// the one in view.
+//
+//   mountSectionNav(container) -> { update(), resize(), setActive() }
+//
+// The bar is always in the DOM; css/app.css shows it below 760 px only. Scrolling
+// is smooth unless the user asks for reduced motion.
+
+
+
+const SECTIONS = [
+  { id: 'sidebar', label: 'Design', icon: '<path d="M3 4.5h10M3 8h10M3 11.5h10"/><circle cx="6" cy="4.5" r="1.4" fill="currentColor"/><circle cx="10.5" cy="8" r="1.4" fill="currentColor"/><circle cx="7.5" cy="11.5" r="1.4" fill="currentColor"/>' },
+  { id: 'center', label: 'Pattern', icon: '<rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M2.5 8h11M5 2.5l3 5.5M8 2.5l3 5.5M5 8l3 5.5M8 8l3 5.5"/>' },
+  { id: 'pane-3d', label: '3-D', icon: '<path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5z"/><path d="M2.5 5 8 8.2 13.5 5M8 8.2v6"/>' },
+  { id: 'pane-analysis', label: 'Analysis', icon: '<path d="M2.5 13.5h11"/><path d="M3 11c2-6 3.5-6 5-2.5S11 9 13 3.5"/>' },
+];
+
+function smooth() {
+  return !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+function mountSectionNav(container) {
+  container.replaceChildren();
+  const buttons = SECTIONS.map((s) => {
+    const b = el('button', { type: 'button', class: 'snav-btn', 'data-target': s.id });
+    b.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${s.icon}</svg>`;
+    b.append(el('span', { text: s.label }));
+    b.addEventListener('click', () => {
+      const target = document.getElementById(s.id);
+      if (!target) return;
+      const from = window.scrollY;
+      const top = Math.max(0, from + target.getBoundingClientRect().top - 12);
+      if (!smooth()) { window.scrollTo(0, top); mark(s.id); return; }
+      window.scrollTo({ top, behavior: 'smooth' });
+      // some embedded browsers ignore smooth scrolling: jump if it has not started
+      setTimeout(() => { if (Math.abs(window.scrollY - from) < 1 && Math.abs(top - from) > 1) window.scrollTo(0, top); }, 250);
+      mark(s.id);
+    });
+    return b;
+  });
+  container.append(...buttons);
+
+  function mark(id) {
+    for (const b of buttons) {
+      if (b.dataset.target === id) b.setAttribute('aria-current', 'true');
+      else b.removeAttribute('aria-current');
+    }
+  }
+
+  // The current section is the one under the middle of the screen; at the very
+  // top or bottom of the page, the first or last one.
+  function current() {
+    if (getComputedStyle(container).display === 'none') return;   // bar hidden (wide screen)
+    // on phones the sections are not in DOM order (the pattern comes first)
+    const boxes = SECTIONS.map((s) => {
+      const target = document.getElementById(s.id);
+      return target ? { id: s.id, r: target.getBoundingClientRect() } : null;
+    }).filter(Boolean).sort((a, b) => a.r.top - b.r.top);
+    if (!boxes.length) return;
+    const doc = document.documentElement;
+    if (window.scrollY + window.innerHeight >= doc.scrollHeight - 2) { mark(boxes[boxes.length - 1].id); return; }
+    const mid = window.innerHeight / 2;
+    let best = boxes[0].id;
+    for (const b of boxes) if (b.r.top <= mid) best = b.id;     // the last one that starts above the middle
+    mark(best);
+  }
+  const onScroll = rafThrottle(current);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  current();
+
+  return { update() {}, resize() { onScroll(); }, setActive() {} };
+}
+return Object.freeze({ mountSectionNav });
 })();
 // ── js/core/mold.js ──
 __m["js/core/mold.js"] = (() => {
@@ -6145,7 +6574,7 @@ const { TAU } = __m["js/core/kresling.js"];
 // params.strainMax is dropped, because the sheet would tear or yield first
 // (stiff panels on monostable designs produce such artefacts).
 //
-//   energyAnalysis(design) -> EnergyResult (CONTRACT §5)              memoised
+//   energyAnalysis(design) -> EnergyResult (docs/ARCHITECTURE.md §5)              memoised
 //   energyAnalysisWith(design, { samples = 241, scan = 72, hinges = true })
 //       -> EnergyResult, not memoised (coarser paths for sweeps and the
 //          explorer; hinges: false leaves only the membranes)
@@ -6507,11 +6936,13 @@ function makeExporter(app) {
   }
 
   const ZIP_NAME = { svg: '_svg-pages', png: '_png', 'stl-molds': '_molds', pack: '_fabrication-pack' };
+  // the tube STL and the design file are at design size; everything else follows the print scale
+  const DESIGN_SIZE = new Set(['json', 'stl-tube']);
 
   return async function exportAs(format) {
     const c = current();
     if (!c) return null;
-    const stem = fileStem(c.params);
+    const stem = fileStem(c.params, { scaled: !DESIGN_SIZE.has(format) });
     let files;
     try {
       files = await build(format, c, stem);
@@ -6659,7 +7090,7 @@ __m["js/ui/shortcuts.js"] = (() => {
 //   SHORTCUTS                       -> [{ keys: [...], label }] for the help dialog
 //
 // Action types: 'undo', 'redo', 'export' (arg 'svg' | 'pdf'), 'fit',
-// 'sides' (arg 3..9), 'animate', 'escape'. Keys typed into text fields,
+// 'sides' (arg 3..9), 'animate', 'share', 'theme', 'help', 'escape'. Keys typed into text fields,
 // selects and editable content are left alone; Space is also left to
 // buttons, checkboxes and other controls that use it.
 
@@ -6671,6 +7102,9 @@ const SHORTCUTS = [
   { keys: ['F'], label: 'Fit the pattern to one page' },
   { keys: ['3', '…', '9'], label: 'Set the number of sides' },
   { keys: ['Space'], label: 'Start or stop the fold animation' },
+  { keys: ['L'], label: 'Copy a link that opens this design' },
+  { keys: ['T'], label: 'Switch the theme: system, light, dark' },
+  { keys: ['?'], label: 'Open this help' },
   { keys: ['Esc'], label: 'Close this dialog or a menu' },
 ];
 
@@ -6692,6 +7126,9 @@ function keyAction(e) {
   if (lower === 's') return { type: 'export', arg: 'svg' };
   if (lower === 'p') return { type: 'export', arg: 'pdf' };
   if (lower === 'f') return { type: 'fit' };
+  if (lower === 'l') return { type: 'share' };
+  if (lower === 't') return { type: 'theme' };
+  if (key === '?') return { type: 'help' };
   if (/^[3-9]$/.test(key)) return { type: 'sides', arg: Number(key) };
   return null;
 }
@@ -6721,8 +7158,9 @@ function usesSpace(t) {
 }
 
 /**
- * Listen for shortcuts. handlers.fit() fits the pattern to the page
- * (js/ui/actions.js); everything else goes through app.store / app.exportAs.
+ * Listen for shortcuts. handlers: fit() fits the pattern to the page (js/ui/actions.js),
+ * share() copies a design link, theme() switches the theme, help() opens the help
+ * dialog; everything else goes through app.store / app.exportAs.
  */
 function installShortcuts(app, handlers = {}) {
   const { store } = app;
@@ -6745,6 +7183,9 @@ function installShortcuts(app, handlers = {}) {
       case 'redo': store.redo(); break;
       case 'export': app.exportAs(act.arg); break;
       case 'fit': if (handlers.fit) handlers.fit(); break;
+      case 'share': if (handlers.share) handlers.share(); break;
+      case 'theme': if (handlers.theme) handlers.theme(); break;
+      case 'help': if (handlers.help) handlers.help(); break;
       case 'sides': store.setParams({ n: act.arg }); break;
       case 'animate': store.setView({ animating: !store.view.animating }); break;
       default: return;
@@ -11195,11 +11636,14 @@ return Object.freeze({ mountExplorer });
 __m["js/main.js"] = (() => {
 const { createStore } = __m["js/app/store.js"];
 const { el } = __m["js/app/util.js"];
+const { readShareHash } = __m["js/app/share.js"];
 const { onThemeChange } = __m["js/ui/theme.js"];
 const { toast } = __m["js/ui/toast.js"];
 const { saveFile, saveMessage, primeSaving } = __m["js/export/save.js"];
 const { mountControls } = __m["js/ui/controls.js"];
-const { mountToolbar } = __m["js/ui/toolbar.js"];
+const { mountToolbar, copyShareLink, cycleTheme } = __m["js/ui/toolbar.js"];
+const { installDropOpen } = __m["js/ui/openfile.js"];
+const { mountSectionNav } = __m["js/ui/sectionnav.js"];
 const { mountActions, makeExporter, fitToPage } = __m["js/ui/actions.js"];
 const { mountSources } = __m["js/ui/sources.js"];
 const { installShortcuts } = __m["js/ui/shortcuts.js"];
@@ -11208,11 +11652,16 @@ const { mountMoldView } = __m["js/render/moldview.js"];
 const { mountView3d } = __m["js/render/view3d.js"];
 const { mountAnalysis } = __m["js/ui/panels.js"];
 const { mountExplorer } = __m["js/ui/explorer.js"];
-// Boot: store, app object, views, tabs, shortcuts.
+// Boot: store, app object, views, tabs, shortcuts, share links, file drop.
 //
-// Every view follows the mount protocol in docs/CONTRACT.md §7. A view that
+// Every view follows the mount protocol in docs/ARCHITECTURE.md §7. A view that
 // fails to mount shows an error in its own pane; the rest keeps working.
 // Hidden panes are marked dirty and refreshed when they are shown again.
+// A share link (#v=1&…, see js/app/share.js) opens its design on load and when
+// the hash changes; the hash is then cleared so later edits do not contradict it.
+
+
+
 
 
 
@@ -11275,6 +11724,7 @@ function boot() {
   mount('3-D view', 'pane-3d', mountView3d);
   mount('analysis panel', 'pane-analysis', mountAnalysis);
   mount('export bar', 'actions', mountActions);
+  mount('section bar', 'section-nav', mountSectionNav);
 
   function deliver(rec, change) {
     try { rec.view.update(change); } catch (e) { console.error(`${rec.name} update failed`, e); }
@@ -11339,7 +11789,31 @@ function boot() {
     for (const rec of views) ro.observe(rec.el);
   }
 
-  installShortcuts(app, { fit: () => fitToPage(app) });
+  installShortcuts(app, {
+    fit: () => fitToPage(app),
+    share: () => copyShareLink(app),
+    theme: () => cycleTheme(app),
+    help: () => sources.open(),
+  });
+  installDropOpen(app);
+
+  // ── share links ──
+  function clearHash() {
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* sandboxed */ }
+  }
+  function openSharedLink() {
+    const res = readShareHash(window.location.hash);
+    if (!res) return false;
+    clearHash();
+    if (!res.ok) { toast(res.error, 'warn', { timeout: 0 }); return false; }
+    const changed = store.load(res.params);   // recorded: Undo goes back to the design that was open
+    const left = res.ignored.length ? ` Not used by this app and left out: ${res.ignored.join(', ')}.` : '';
+    toast(`Opened the design from the link.${changed ? ' Undo goes back to the previous one.' : ''}${left}`, 'ok');
+    return true;
+  }
+  window.addEventListener('hashchange', openSharedLink);
+  openSharedLink();
+
   if (store.design().valid === false) toast(store.design().errors[0], 'warn');
   window.__kresling = app;   // handy in the console
 }

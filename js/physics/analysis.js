@@ -12,7 +12,7 @@
 // params.strainMax is dropped, because the sheet would tear or yield first
 // (stiff panels on monostable designs produce such artefacts).
 //
-//   energyAnalysis(design) -> EnergyResult (CONTRACT §5)              memoised
+//   energyAnalysis(design) -> EnergyResult (docs/ARCHITECTURE.md §5)              memoised
 //   energyAnalysisWith(design, { samples = 241, scan = 72, hinges = true })
 //       -> EnergyResult, not memoised (coarser paths for sweeps and the
 //          explorer; hinges: false leaves only the membranes)

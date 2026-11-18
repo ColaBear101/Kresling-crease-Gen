@@ -1,16 +1,21 @@
-// Boot: store, app object, views, tabs, shortcuts.
+// Boot: store, app object, views, tabs, shortcuts, share links, file drop.
 //
-// Every view follows the mount protocol in docs/CONTRACT.md §7. A view that
+// Every view follows the mount protocol in docs/ARCHITECTURE.md §7. A view that
 // fails to mount shows an error in its own pane; the rest keeps working.
 // Hidden panes are marked dirty and refreshed when they are shown again.
+// A share link (#v=1&…, see js/app/share.js) opens its design on load and when
+// the hash changes; the hash is then cleared so later edits do not contradict it.
 
 import { createStore } from './app/store.js';
 import { el } from './app/util.js';
+import { readShareHash } from './app/share.js';
 import { onThemeChange } from './ui/theme.js';
 import { toast } from './ui/toast.js';
 import { saveFile, saveMessage, primeSaving } from './export/save.js';
 import { mountControls } from './ui/controls.js';
-import { mountToolbar } from './ui/toolbar.js';
+import { mountToolbar, copyShareLink, cycleTheme } from './ui/toolbar.js';
+import { installDropOpen } from './ui/openfile.js';
+import { mountSectionNav } from './ui/sectionnav.js';
 import { mountActions, makeExporter, fitToPage } from './ui/actions.js';
 import { mountSources } from './ui/sources.js';
 import { installShortcuts } from './ui/shortcuts.js';
@@ -65,6 +70,7 @@ function boot() {
   mount('3-D view', 'pane-3d', mountView3d);
   mount('analysis panel', 'pane-analysis', mountAnalysis);
   mount('export bar', 'actions', mountActions);
+  mount('section bar', 'section-nav', mountSectionNav);
 
   function deliver(rec, change) {
     try { rec.view.update(change); } catch (e) { console.error(`${rec.name} update failed`, e); }
@@ -129,7 +135,31 @@ function boot() {
     for (const rec of views) ro.observe(rec.el);
   }
 
-  installShortcuts(app, { fit: () => fitToPage(app) });
+  installShortcuts(app, {
+    fit: () => fitToPage(app),
+    share: () => copyShareLink(app),
+    theme: () => cycleTheme(app),
+    help: () => sources.open(),
+  });
+  installDropOpen(app);
+
+  // ── share links ──
+  function clearHash() {
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* sandboxed */ }
+  }
+  function openSharedLink() {
+    const res = readShareHash(window.location.hash);
+    if (!res) return false;
+    clearHash();
+    if (!res.ok) { toast(res.error, 'warn', { timeout: 0 }); return false; }
+    const changed = store.load(res.params);   // recorded: Undo goes back to the design that was open
+    const left = res.ignored.length ? ` Not used by this app and left out: ${res.ignored.join(', ')}.` : '';
+    toast(`Opened the design from the link.${changed ? ' Undo goes back to the previous one.' : ''}${left}`, 'ok');
+    return true;
+  }
+  window.addEventListener('hashchange', openSharedLink);
+  openSharedLink();
+
   if (store.design().valid === false) toast(store.design().errors[0], 'warn');
   window.__kresling = app;   // handy in the console
 }

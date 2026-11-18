@@ -1,12 +1,17 @@
 // Top bar: wordmark, design status, presets (built-in and saved in this
-// browser), undo/redo, open/save a design file, help.
+// browser), undo/redo, open/save a design file, copy a share link, theme, help.
 //
 //   mountToolbar(container, app, { onHelp }) -> { update(change), resize(), setActive() }
+//   copyShareLink(app)  -> Promise<boolean>   copies a link that opens the current design
+//   cycleTheme(app?)    -> the new preference ('auto' | 'light' | 'dark')
 
 import { el } from '../app/util.js';
 import { PRESETS, normalizeParams, migrateParams, DEFAULTS } from '../core/params.js';
-import { readDesignFile } from '../export/json.js';
+import { shareUrl } from '../app/share.js';
+import { isHosted } from '../export/save.js';
 import { statusInfo } from './controls.js';
+import { openDesignFile } from './openfile.js';
+import { themePref, setThemePref, nextThemePref } from './theme.js';
 
 const ICONS = {
   // a Kresling floor seen from the side: two rings joined by slanted creases
@@ -17,9 +22,55 @@ const ICONS = {
   open: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14V13H2z"/></svg>',
   save: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>',
   help: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1v.3"/><circle cx="8" cy="11.6" r=".4" fill="currentColor"/></svg>',
+  link: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9"/><path d="M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9"/></svg>',
+  auto: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/></svg>',
+  light: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>',
+  dark: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z"/></svg>',
   check: '<svg class="pop-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>',
   trash: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>',
 };
+
+const THEME_WORDS = {
+  auto: 'Theme: follows the system',
+  light: 'Theme: light',
+  dark: 'Theme: dark',
+};
+
+// Clipboard API first; the hidden-textarea copy for pages where it is blocked.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* fall through */ }
+  const ta = el('textarea', { readonly: true, 'aria-hidden': 'true', style: { position: 'fixed', top: '-1000px', opacity: '0' } });
+  ta.value = text;
+  document.body.append(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+/** Copy a link that opens the current design (see js/app/share.js). */
+export async function copyShareLink(app) {
+  if (!app.store.design().valid) app.toast('This design has no valid fold yet; the link opens it as it is.', 'warn');
+  const hosted = await isHosted();
+  const url = shareUrl(app.store.params, hosted ? null : window.location);
+  if (await copyText(url)) {
+    const where = window.location.protocol === 'file:' || hosted ? ' It opens in the online app.' : '';
+    app.toast(`Link copied: it opens this design.${where}`, 'ok');
+    return true;
+  }
+  app.toast(`Copy this link to share the design: ${url}`, 'info', { timeout: 0 });
+  return false;
+}
+
+/** Switch auto -> light -> dark and say which one is on. */
+export function cycleTheme(app) {
+  const pref = setThemePref(nextThemePref(themePref()));
+  if (app) app.toast(`${THEME_WORDS[pref]}.`, 'info');
+  return pref;
+}
 
 function iconButton(icon, label, extra = {}) {
   const b = el('button', { type: 'button', class: 'icon-btn', 'aria-label': label, title: label, ...extra });
@@ -144,27 +195,12 @@ export function mountToolbar(container, app, { onHelp } = {}) {
 
   // ── files ──
   const fileInput = el('input', { type: 'file', accept: '.json,application/json', hidden: true, 'aria-hidden': 'true', tabindex: '-1' });
-  fileInput.addEventListener('change', async () => {
+  fileInput.addEventListener('change', () => {
     const file = fileInput.files && fileInput.files[0];
     fileInput.value = '';
-    if (!file) return;
-    try {
-      const res = readDesignFile(await file.text());
-      if (!res.ok) { app.toast(`Could not open ${file.name}: ${res.error}`, 'error'); return; }
-      store.load(res.params);
-      // say what was converted, limited or left out: a plain "Opened" would hide it
-      const said = [...(res.notes || [])];
-      if (res.ignored && res.ignored.length) {
-        const names = res.ignored.slice(0, 6).join(', ') + (res.ignored.length > 6 ? ', …' : '');
-        said.push(`Not used by this app and left out: ${names}.`);
-      }
-      if (!said.length) app.toast(`Opened ${file.name}.`, 'ok');
-      else app.toast(`Opened ${file.name}. ${said.join(' ')} Undo goes back.`, res.source === 'crease-gen' && res.drawable !== false ? 'info' : 'warn', { timeout: 0 });
-    } catch (e) {
-      app.toast(`Could not read ${file.name}.`, 'error');
-    }
+    openDesignFile(app, file);
   });
-  const openBtn = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', title: 'Open a design file (.json)' });
+  const openBtn = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', title: 'Open a design file (.json). You can also drop one on the page.' });
   openBtn.innerHTML = ICONS.open;
   openBtn.append(el('span', { class: 'tb-label', text: 'Open' }));
   openBtn.addEventListener('click', () => fileInput.click());
@@ -172,6 +208,21 @@ export function mountToolbar(container, app, { onHelp } = {}) {
   saveBtn.innerHTML = ICONS.save;
   saveBtn.append(el('span', { class: 'tb-label', text: 'Save design' }));
   saveBtn.addEventListener('click', () => app.exportAs('json'));
+  const linkBtn = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', title: 'Copy a link that opens this design (L)' });
+  linkBtn.innerHTML = ICONS.link;
+  linkBtn.append(el('span', { class: 'tb-label', text: 'Copy link' }));
+  linkBtn.addEventListener('click', () => copyShareLink(app));
+
+  const themeBtn = iconButton(ICONS.auto, THEME_WORDS.auto);
+  function syncTheme() {
+    const pref = themePref();
+    themeBtn.innerHTML = ICONS[pref];
+    const label = `${THEME_WORDS[pref]}. Click to switch (T).`;
+    themeBtn.setAttribute('aria-label', label);
+    themeBtn.title = label;
+  }
+  themeBtn.addEventListener('click', () => { cycleTheme(); syncTheme(); });
+  syncTheme();
 
   const help = el('button', { type: 'button', class: 'btn btn-sm btn-ghost', title: 'How it works, shortcuts and sources' });
   help.innerHTML = ICONS.help;
@@ -183,8 +234,9 @@ export function mountToolbar(container, app, { onHelp } = {}) {
     presets, el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
     el('div', { class: 'tb-group', role: 'group', 'aria-label': 'History' }, undo, redo),
     el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
-    el('div', { class: 'tb-group', role: 'group', 'aria-label': 'Design file' }, openBtn, saveBtn, fileInput),
-    help,
+    el('div', { class: 'tb-group', role: 'group', 'aria-label': 'Design file' }, openBtn, saveBtn, linkBtn, fileInput),
+    el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
+    themeBtn, help,
   );
 
   function sync() {
@@ -199,7 +251,10 @@ export function mountToolbar(container, app, { onHelp } = {}) {
   sync();
 
   return {
-    update(change) { if (!change || change.kind === 'params') sync(); },
+    update(change) {
+      if (!change || change.kind === 'params') sync();
+      if (change && change.kind === 'theme') syncTheme();
+    },
     resize() {},
     setActive() {},
   };
