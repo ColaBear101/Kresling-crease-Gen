@@ -5,7 +5,7 @@
 //   SHORTCUTS                       -> [{ keys: [...], label }] for the help dialog
 //
 // Action types: 'undo', 'redo', 'export' (arg 'svg' | 'pdf'), 'fit',
-// 'sides' (arg 3..9), 'animate', 'escape'. Keys typed into text fields,
+// 'sides' (arg 3..9), 'animate', 'share', 'theme', 'help', 'escape'. Keys typed into text fields,
 // selects and editable content are left alone; Space is also left to
 // buttons, checkboxes and other controls that use it.
 
@@ -17,6 +17,9 @@ export const SHORTCUTS = [
   { keys: ['F'], label: 'Fit the pattern to one page' },
   { keys: ['3', '…', '9'], label: 'Set the number of sides' },
   { keys: ['Space'], label: 'Start or stop the fold animation' },
+  { keys: ['L'], label: 'Copy a link that opens this design' },
+  { keys: ['T'], label: 'Switch the theme: system, light, dark' },
+  { keys: ['?'], label: 'Open this help' },
   { keys: ['Esc'], label: 'Close this dialog or a menu' },
 ];
 
@@ -38,6 +41,9 @@ export function keyAction(e) {
   if (lower === 's') return { type: 'export', arg: 'svg' };
   if (lower === 'p') return { type: 'export', arg: 'pdf' };
   if (lower === 'f') return { type: 'fit' };
+  if (lower === 'l') return { type: 'share' };
+  if (lower === 't') return { type: 'theme' };
+  if (key === '?') return { type: 'help' };
   if (/^[3-9]$/.test(key)) return { type: 'sides', arg: Number(key) };
   return null;
 }
@@ -67,8 +73,9 @@ function usesSpace(t) {
 }
 
 /**
- * Listen for shortcuts. handlers.fit() fits the pattern to the page
- * (js/ui/actions.js); everything else goes through app.store / app.exportAs.
+ * Listen for shortcuts. handlers: fit() fits the pattern to the page (js/ui/actions.js),
+ * share() copies a design link, theme() switches the theme, help() opens the help
+ * dialog; everything else goes through app.store / app.exportAs.
  */
 export function installShortcuts(app, handlers = {}) {
   const { store } = app;
@@ -91,6 +98,9 @@ export function installShortcuts(app, handlers = {}) {
       case 'redo': store.redo(); break;
       case 'export': app.exportAs(act.arg); break;
       case 'fit': if (handlers.fit) handlers.fit(); break;
+      case 'share': if (handlers.share) handlers.share(); break;
+      case 'theme': if (handlers.theme) handlers.theme(); break;
+      case 'help': if (handlers.help) handlers.help(); break;
       case 'sides': store.setParams({ n: act.arg }); break;
       case 'animate': store.setView({ animating: !store.view.animating }); break;
       default: return;

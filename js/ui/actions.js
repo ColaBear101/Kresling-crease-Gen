@@ -195,11 +195,13 @@ export function makeExporter(app) {
   }
 
   const ZIP_NAME = { svg: '_svg-pages', png: '_png', 'stl-molds': '_molds', pack: '_fabrication-pack' };
+  // the tube STL and the design file are at design size; everything else follows the print scale
+  const DESIGN_SIZE = new Set(['json', 'stl-tube']);
 
   return async function exportAs(format) {
     const c = current();
     if (!c) return null;
-    const stem = fileStem(c.params);
+    const stem = fileStem(c.params, { scaled: !DESIGN_SIZE.has(format) });
     let files;
     try {
       files = await build(format, c, stem);

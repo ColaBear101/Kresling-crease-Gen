@@ -1,29 +1,122 @@
 # Kresling Studio
 
-**Live app:** [kreslinggen.vercel.app](https://kreslinggen.vercel.app)
+Design Kresling origami tubes in the browser: an exact crease pattern you can print and
+fold, a 3-D preview that folds the way the paper does, a mechanics model of the snap,
+and the files to make it: PDF, SVG, PNG, DXF, an STL tube and STL embossing plates.
 
-Design Kresling origami tubes: an exact crease pattern you can print and fold, a 3-D
-preview that folds the way the paper does, a mechanics model of the snap (energy,
-force, vibration, buckling), a two-parameter design explorer, and fabrication files
-(PDF, SVG, PNG, DXF, STL tube, STL embossing plates, and a zip with all of them plus
-folding instructions).
+**Open the app:** [kreslinggen.vercel.app](https://kreslinggen.vercel.app) · no install, no account, nothing uploaded
 
-It replaces Kresling Crease Generator, the earlier app in this repository: the same
-sheet layout and feature set, rebuilt around exact rigid-panel geometry. The earlier app
-is still in the git history; its last version (v25) is commit fb4f988. Plain HTML/CSS/JS,
-no dependencies, no build tools beyond Node for the bundler and tests.
+![Kresling Studio: design controls on the left, the printable crease pattern in the middle, the folded tube and its energy curve on the right](docs/screenshot.png)
 
-## Run it
+> **About the name.** This repository is still called *Kresling-crease-Gen* after the
+> first app that lived here, Kresling Crease Generator. The app was rebuilt from scratch
+> around exact rigid-panel geometry and renamed **Kresling Studio**. The old app is in the
+> git history; its last version (v25) is commit `fb4f988`.
 
-- **No server:** open `dist/kresling.html` in a browser. It is one self-contained file
-  (the source modules bundled), so it also works from disk.
-- **From source:** `node tools/serve.mjs` and open http://localhost:8765/, or use any static
-  file server (`npx serve .`). ES modules need http.
-- **Build the single file:** `node tools/build.mjs` writes `dist/kresling.html` and
-  `dist/artifact.html` (the same page without the document skeleton).
-- **Tests:** `node test/<name>.test.mjs` for `core`, `pattern`, `tube`, `mechanics`,
-  `physics`, `export`. `node tools/make-samples.mjs` writes every preset's exports to
-  `samples/` and prints a summary table.
+## Contents
+
+- [What it does](#what-it-does)
+- [Quick start](#quick-start)
+- [Using the app](#using-the-app) · [share links](#share-a-design) · [shortcuts](#keyboard-shortcuts) · [files](#files-it-makes)
+- [How it works](#how-it-works)
+- [Compared with Kresling Crease Generator](#compared-with-kresling-crease-generator-v24)
+- [Development](#development) · [project layout](#project-layout)
+- [References](#references) · [License](#license)
+
+## What it does
+
+- **Exact geometry.** Give the two floor heights you want, or the flat strip (height and
+  crease angle); the app solves both rigid folded states in closed form and tells you
+  whether the tube is bistable, monostable or cannot fold.
+- **Printable pattern.** The whole tube on one sheet, with seam strips, end rings,
+  dimension labels and a scale bar. Too big for the page? It tiles across pages with
+  overlap, or fits to one page in a click.
+- **3-D fold preview** with the same crease lengths as the print: fold it uniformly or one
+  floor at a time, and play the snap.
+- **Mechanics.** Energy and force along the fold (barrier, snap and release forces),
+  stiffness, vibration modes with a payload, column buckling, and peak panel strain
+  against the sheet's limit, for paper, card, Kapton, PET, PP or your own material.
+- **Explorer.** Sweep any two parameters and see where the design is bistable, fits the
+  page, survives buckling and stays below the strain limit.
+- **Fabrication files.** Vector PDF, layered SVG, 300 dpi PNG, DXF for cutters, an STL of
+  the tube, STL press molds for embossing the creases, and an "Everything" zip with
+  folding instructions.
+- **Works offline.** `dist/kresling.html` is the whole app in one file.
+
+## Quick start
+
+| | |
+|---|---|
+| **Online** | Open [kreslinggen.vercel.app](https://kreslinggen.vercel.app). |
+| **Offline** | Download [`dist/kresling.html`](dist/kresling.html) and open it in a browser. It is self-contained, so it works from disk. |
+| **From source** | Node 20 or newer, no `npm install` needed: `npm start`, then open http://localhost:8765/ |
+
+## Using the app
+
+1. **Start from an example.** *Presets* has ready designs; anything you save there stays
+   in this browser.
+2. **Shape the tube** in the left sidebar. The chip in the top bar says at once whether the
+   design is bistable; an ⓘ next to a control explains it.
+3. **Check it** on the right: the folded tube, the energy curve (click or drag on it to
+   fold the 3-D view), stiffness, vibration and buckling.
+4. **Lay out the sheet**: paper size, print scale (*Fit to page* or `F`), end rings and
+   seam strips.
+5. **Export** from the bar under the pattern, then print at 100 % ("actual size"); the
+   scale bar on the sheet should measure 50 mm.
+
+Your work is saved in the browser as you go. *Save design* writes a `.json` file; *Open*
+reads it back, and so does dropping the file anywhere on the page. Presets exported by
+Kresling Crease Generator open too (see [below](#how-it-works)). Undo and redo cover every
+design change.
+
+On a phone the sections stack, and a bar at the bottom jumps between
+**Design · Pattern · 3-D · Analysis**. The theme button in the top bar switches between
+following the system, light and dark.
+
+### Share a design
+
+*Copy link* (or `L`) copies a link that opens exactly this design, for example
+
+```
+https://kreslinggen.vercel.app/#v=1&n=8&dia=60&floors=4
+```
+
+The link lists only the values that differ from the standard design, so it stays short and
+can be edited by hand. Opening it replaces the open design, and Undo brings yours back.
+Links keep their meaning when later versions change a default. Copied from the offline
+file, the link points to the online app.
+
+### Keyboard shortcuts
+
+| Keys | Action |
+|---|---|
+| `Ctrl Z` / `Ctrl Shift Z`, `Ctrl Y` (`⌘` on a Mac) | Undo / redo |
+| `3` … `9` | Number of sides |
+| `Space` | Play or stop the fold animation |
+| `F` | Fit the pattern to one page |
+| `P` / `S` | Save the pattern as PDF / SVG |
+| `L` | Copy a link to this design |
+| `T` | Switch the theme: system, light, dark |
+| `?` | Help, shortcuts and sources |
+| `Esc` | Close a dialog or menu |
+
+### Files it makes
+
+| Button | File | Scale |
+|---|---|---|
+| PDF | Vector PDF, one page or tiled pages with a legend | print scale |
+| SVG | Layers: cut, mountain, valley, end ring, glue, info (one file per page when tiled) | print scale |
+| PNG | 300 dpi image of the sheet | print scale |
+| DXF | AutoCAD R12, mm, one layer per fold type, for cutters and CAD | print scale |
+| Tube STL | The deployed tube as a closed, printable solid | design size |
+| Mold STL | Mountain and valley embossing plates with a registration border (zip) | print scale |
+| Everything | All of the above plus `design.json` and `README.txt` with folding steps (zip) | |
+| Save design | `design.json`: the parameters, to open again later | |
+
+Files are named after the design: `kresling_n6_d40_f6` is 6 sides, 40 mm across,
+6 floors. A stack adds `x2`, a mirrored (left-handed) pattern adds `_left`, and files drawn
+at a print scale other than 100 % add it (`_80pct`), so two prints of one design never
+overwrite each other.
 
 ## How it works
 
@@ -40,27 +133,26 @@ either as the two stable floor heights you want, or as the flat strip (height an
 the printed side outside: polygon rings and short diagonals are mountain folds, long
 diagonals are valley folds (classic regime, crease angle above 90°).
 
-**Pattern** (`js/core/pattern.js`): alternating or same-handed floors, a true mirror for
-left-handed tubes, and the sheet layout of the earlier Kresling Crease Generator: a straight
-seam with glue strips on both sides (whole panels, or widths in mm) that carry copies of the
-creases they are glued over, and plain end rings across the top and bottom of the sheet
-(set separately, 0–60 mm each, 10 mm by default).
-The sheet holds the whole tube: floors × stack count floors in one piece, as the original
-draws it. Patterns that do not fit the page are tiled across several pages with 10 mm
-overlap. When no pattern page has room for the legend and scale bar (a tiled print, or a
-sheet that nearly fills its page), the PDF ends with a legend page.
+**Pattern** (`js/core/pattern.js`). Alternating or same-handed floors, a true mirror for
+left-handed tubes, and the sheet layout of Kresling Crease Generator: a straight seam with
+glue strips on both sides (whole panels, or widths in mm) that carry copies of the creases
+they are glued over, and plain end rings across the top and bottom of the sheet (set
+separately, 0–60 mm each, 10 mm by default). The sheet holds the whole tube: floors × stack
+count floors in one piece. Patterns that do not fit the page are tiled across several pages
+with 10 mm overlap. When no pattern page has room for the legend and scale bar (a tiled
+print, or a sheet that nearly fills its page), the PDF ends with a legend page.
 
 **Print scale.** The printed sheet, the DXF and the press molds all follow the print
 scale, so they stay one size; the 3-D printed tube (STL) stays at design size. The mold
 plates carry a low border along the sheet outline for lining the sheet up, and their
 ridge width is limited to 0.9 × the gap between neighbouring creases.
 
-**Presets from Kresling Crease Generator.** Open reads the preset files the earlier app exports and
-converts them (cm to mm, arc side to chord, entered angle to drawn angle) so that every
-crease lands where that app prints it. Mountain and valley follow the folded shape, as
-everywhere in this app, so some fold directions differ from that app's red and green lines;
-the note shown on opening names them. Presets that have no rigid fold open too, but this
-app draws no pattern for them and says why.
+**Presets from Kresling Crease Generator.** *Open* reads the preset files the earlier app
+exports and converts them (cm to mm, arc side to chord, entered angle to drawn angle) so
+that every crease lands where that app prints it. Mountain and valley follow the folded
+shape, as everywhere in this app, so some fold directions differ from that app's red and
+green lines; the note shown on opening names them. Presets that have no rigid fold open
+too, but this app draws no pattern for them and says why.
 
 **Mechanics** (`js/physics/`). Each panel is a constant-strain triangle (plane-stress
 St Venant–Kirchhoff, strain recovered exactly from its three side lengths). By default
@@ -74,7 +166,7 @@ rigid top ring and payload, 6 degrees of freedom (in the style of Kidambi & Wang
 Buckling fits a Timoshenko column to the lateral stiffness of one floor and compares the
 Euler/Engesser load of the stack with the snap force.
 
-Limits: rings are rigid polygons, deformation is symmetric, and interior rings are
+**Limits.** Rings are rigid polygons, deformation is symmetric, and interior rings are
 treated like rigid plates for buckling (so that load is an upper bound). Forces are
 idealised; real creases vary with how sharply they are scored.
 
@@ -91,34 +183,74 @@ idealised; real creases vary with how sharply they are scored.
 | PDF | print dialog of an HTML page | real vector PDF, tiled across pages when needed |
 | Stack count | floors × stack on one sheet | the same |
 | Scale | sheet, DXF and molds | the same (the tube STL stays at design size) |
+| Sharing | preset files | preset files, and links that open the design |
 
-v25, the last version of that app (commit fb4f988), already takes the stable states from the
-exact two-state solution, shows the true diameter, and draws the 3-D view and the energy curve
-along the exact fold path; its creases, ring folds and left-handed pattern are as in v24.
+v25, the last version of that app (commit `fb4f988`), already takes the stable states from
+the exact two-state solution, shows the true diameter, and draws the 3-D view and the energy
+curve along the exact fold path; its creases, ring folds and left-handed pattern are as in v24.
 
 Checking its presets with the exact solver: "Bistable n=6", "Monostable" and
 "Compact unit" have no strain-free folded shape at all (for "Bistable n=6" the shift
 exceeds the limit by 1.2 %), and "Bistable n=8" and "Tall tower" have a single stable state.
 
-## Project layout
+## Development
+
+Plain HTML, CSS and JavaScript modules: no dependencies, no framework, no build step to
+run the source. Node (20 or newer) is used only for the dev server, the bundler and the tests.
+
+| Command | What it does |
+|---|---|
+| `npm start` | Serve the source at http://localhost:8765/ (`node tools/serve.mjs [port]`; ES modules need http) |
+| `npm test` | Run every test file and print a summary; `npm test -- tube export` runs some, `--verbose` lists each test |
+| `npm run build` | Bundle the app into `dist/kresling.html` (and `dist/artifact.html`, the same page without the document skeleton, for hosts that add their own) |
+| `npm run samples` | Write every preset's exports to `samples/` and print a summary table |
+
+Each test file also runs on its own: `node test/pattern.test.mjs`.
+
+Before changing code, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): units and
+coordinate frames, the module map, the design object, the physics and export APIs, the
+view mount protocol and the rules every module follows (only the import forms the bundler
+understands, no DOM access in `js/core`, `js/physics` and `js/export`, colours from CSS
+tokens). Rebuild `dist/` after changing the source, since the offline file is committed.
+
+### Project layout
 
 ```
-index.html              page shell (loads css/*.css and js/main.js)
-css/                    app.css (tokens, layout, shared components), flat, view3d, panels, explorer
-js/main.js              boot: store, views, tabs, shortcuts
-js/app/                 store (params + undo/redo + view state), util
-js/core/                kresling (geometry), params (schema, presets, materials), design,
-                        pattern, layout (page placement, tiling), tube (3-D mesh), mold, info
-js/physics/             mechanics (CST + hinge energy), analysis (energy path), modal,
-                        buckling, sweeps (thickness), explore (explorer evaluation)
-js/render/              flat (pattern view), view3d, moldview, camera, chart
-js/ui/                  controls (sidebar), toolbar, actions (exports), panels (analysis),
-                        explorer, sources (help dialog), shortcuts, toast, theme
-js/export/              svg, pdf, png, dxf, stl, json, zip, save
-tools/                  build.mjs (bundler), serve.mjs (dev server), make-samples.mjs
-test/                   node tests (harness.mjs)
-dist/kresling.html      the whole app in one file (node tools/build.mjs)
-docs/CONTRACT.md        module contract the code follows
+index.html               page shell: loads css/*.css and js/main.js
+css/
+  app.css                tokens (light and dark), page grid, shared components
+  flat.css view3d.css    one stylesheet per view: pattern, 3-D,
+  panels.css explorer.css  analysis panel, explorer
+js/
+  main.js                boot: store, views, tabs, shortcuts, share links, file drop
+  app/                   state and helpers, no drawing
+    store.js             params with undo/redo, view state, memoised design/pattern/layout
+    share.js             share links: the design in the URL hash
+    util.js              DOM helper, formatting, storage, file names
+  core/                  geometry and sheet layout (pure)
+    kresling.js          exact rigid-panel geometry
+    params.js            every control: schema, defaults, presets, materials, paper sizes
+    design.js            params -> design (states, folds, lengths, warnings)
+    pattern.js           design -> crease pattern of the whole sheet
+    layout.js            page placement, fit and tiling
+    tube.js mold.js      3-D tube mesh, press-mold ridges
+    info.js              legend and info lines printed on the sheet
+  physics/               mechanics (pure)
+    mechanics.js         panel + hinge energy of one floor
+    analysis.js          energy path, snap forces, strain check
+    modal.js buckling.js sweeps.js explore.js
+  render/                canvas views: flat (pattern), moldview, view3d, camera, chart
+  ui/                    toolbar, controls (sidebar), actions (export bar), panels
+                         (analysis), explorer, sources (help dialog), shortcuts, openfile
+                         (open and drop), sectionnav (phone bar), toast, theme
+  export/                svg, pdf, png, dxf, stl, json (design files), zip, save (pure)
+test/                    node tests, one file per area (harness.mjs, no test framework)
+tools/                   serve.mjs (dev server), build.mjs (bundler), test.mjs (runs
+                         all tests), make-samples.mjs
+dist/kresling.html       the whole app in one file (npm run build)
+docs/
+  ARCHITECTURE.md        how the code fits together, and its rules
+  screenshot.png
 ```
 
 ## References
@@ -139,7 +271,7 @@ MIT, see [LICENSE](LICENSE).
 
 ---
 
-> "Nothing is permanent except change." (the Buddha)
+> "Nothing is permanent except change." (attributed to Heraclitus)
 >
 > A Kresling tube holds two stable equilibria and no others; it doesn't hover
 > in between. Every other configuration is transient, snapping toward one
